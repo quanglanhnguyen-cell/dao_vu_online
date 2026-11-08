@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đạo Vũ Karate - Quản Lý Võ Đường</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .page-content { display: none; }
+        .page-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans min-h-screen flex flex-col md:flex-row">
+
+    <!-- Modal Đăng nhập Phân quyền -->
+    <div id="login-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <div class="text-center border-b pb-3">
+                <h2 class="text-xl font-extrabold text-red-700 uppercase">🥋 ĐẠO VŨ KARATE</h2>
+                <p class="text-xs text-gray-500 mt-1">Vui lòng chọn vai trò và nhập mật khẩu</p>
+            </div>
+
+            <div class="space-y-3">
+                <label class="block text-sm font-medium text-gray-700">Chọn vai trò đăng nhập:</label>
+                <select id="role-select" onchange="togglePasswordField()" class="w-full border rounded p-2 focus:ring-2 focus:ring-red-500 outline-none">
+                    <option value="parent">👨‍👩‍👧 Phụ huynh (Tra cứu tự do)</option>
+                    <option value="coach">🥋 Huấn luyện viên (HLV)</option>
+                    <option value="admin">⚙️ Quản lý Võ đường (Admin)</option>
+                </select>
+
+                <div id="pass-container" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700">Mật khẩu truy cập:</label>
+                    <input type="password" id="login-pass" placeholder="Nhập mật khẩu..." class="w-full border rounded p-2 focus:ring-2 focus:ring-red-500 outline-none">
+                </div>
+
+                <button onclick="handleLogin()" class="w-full bg-red-700 text-white py-2.5 rounded font-bold hover:bg-red-800 transition">
+                    Xác Nhận Đăng Nhập
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Header -->
+    <div class="md:hidden bg-red-700 text-white p-4 flex justify-between items-center shadow-md">
+        <h1 class="font-bold text-lg">🥋 ĐẠO VŨ KARATE</h1>
+        <div class="flex items-center gap-3">
+            <span id="current-role-badge-mobile" class="bg-red-900 text-xs px-2 py-1 rounded">Phụ huynh</span>
+            <button id="menu-btn" class="text-2xl focus:outline-none"><i class="fas fa-bars"></i></button>
+        </div>
+    </div>
+<!-- Sidebar Navigation -->
+    <aside id="sidebar" class="bg-red-800 text-white w-full md:w-64 space-y-2 py-6 px-4 absolute md:relative inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition duration-200 ease-in-out z-40">
+        <div class="text-center pb-4 border-b border-red-600">
+            <h2 class="text-xl font-extrabold uppercase tracking-wider">ĐẠO VŨ KARATE</h2>
+            <p class="text-xs text-red-200 mt-1">Gieo võ đạo - Ắt thành nhân</p>
+            <div class="mt-2">
+                <span id="current-role-badge" class="bg-red-900 text-xs font-semibold px-2.5 py-1 rounded-full border border-red-500">Quyền: Phụ huynh</span>
+            </div>
+        </div>
+
+        <nav class="mt-4 space-y-1">
+            <a href="#" id="nav-dashboard" onclick="switchTab('dashboard')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-chart-line w-5"></i> Bảng điều khiển</a>
+            <a href="#" id="nav-students" onclick="switchTab('students')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-user-ninja w-5"></i> Quản lý Võ sinh</a>
+            <a href="#" id="nav-classes" onclick="switchTab('classes')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-users-class w-5"></i> Lớp học & Lịch tập</a>
+            <a href="#" id="nav-attendance" onclick="switchTab('attendance')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-calendar-check w-5"></i> Điểm danh</a>
+            <a href="#" id="nav-tuition" onclick="switchTab('tuition')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-file-invoice-dollar w-5"></i> Học phí & Thu chi</a>
+            <a href="#" id="nav-grades" onclick="switchTab('grades')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-medal w-5"></i> Điểm thi Karate</a>
+            <a href="#" id="nav-parent" onclick="switchTab('parent')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition bg-red-900 font-bold"><i class="fas fa-user-shield w-5"></i> Tra cứu Phụ huynh</a>
+            <a href="#" id="nav-settings" onclick="switchTab('settings')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-cog w-5"></i> Cài đặt & Đồng bộ</a>
+        </nav>
+
+        <div class="pt-6 border-t border-red-700 mt-auto">
+            <button onclick="openLoginModal()" class="w-full bg-red-900 hover:bg-red-950 text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-2">
+                <i class="fas fa-sign-in-alt"></i> Đổi quyền đăng nhập
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+<main class="flex-1 p-4 md:p-8 overflow-y-auto">
+
+        <!-- Tab 1: Dashboard -->
+        <section id="page-dashboard" class="page-content space-y-6">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">📊 Bảng Điều Khiển Tổng Quan</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-blue-500 flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Tổng Võ Sinh</p>
+                        <h3 id="stat-total-students" class="text-2xl font-bold text-gray-800">0</h3>
+                    </div>
+                    <i class="fas fa-users text-3xl text-blue-500 opacity-80"></i>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-green-500 flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Đang Đi Học</p>
+                        <h3 id="stat-active-students" class="text-2xl font-bold text-gray-800">0</h3>
+                    </div>
+                    <i class="fas fa-user-check text-3xl text-green-500 opacity-80"></i>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-yellow-500 flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Học Phí Chưa Thu</p>
+                        <h3 id="stat-pending-tuition" class="text-2xl font-bold text-gray-800">0 đ</h3>
+                    </div>
+                    <i class="fas fa-exclamation-triangle text-3xl text-yellow-500 opacity-80"></i>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-red-500 flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Kết Nối Đám Mây</p>
+                        <h3 id="stat-cloud-status" class="text-sm font-bold text-green-600">Sẵn sàng</h3>
+                    </div>
+                    <i class="fas fa-cloud text-3xl text-red-500 opacity-80"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: Võ Sinh -->
+        <section id="page-students" class="page-content space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-gray-800">♙ Danh Sách Võ Sinh</h2>
+                <button class="bg-red-700 text-white px-4 py-2 rounded shadow hover:bg-red-800"><i class="fas fa-plus mr-1"></i> Thêm Võ Sinh</button>
+            </div>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã VS</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Họ & Tên</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cấp Đai</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lớp Học</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SĐT Phụ Huynh</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng Thái</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        <tr><td colspan="6" class="px-4 py-4 text-center text-gray-400">Chưa có dữ liệu võ sinh.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Tab 3: Điểm danh -->
+        <section id="page-attendance" class="page-content space-y-4">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">✓ Điểm Danh Chuyên Cần</h2>
+            <div class="bg-white p-4 rounded-lg shadow space-y-3">
