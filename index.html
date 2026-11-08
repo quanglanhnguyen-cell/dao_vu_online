@@ -72,7 +72,6 @@
             <a href="#" id="nav-grades" onclick="switchTab('grades')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-medal w-5"></i> Điểm thi Karate</a>
             <a href="#" id="nav-parent" onclick="switchTab('parent')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition bg-red-900 font-bold"><i class="fas fa-user-shield w-5"></i> Tra cứu Phụ huynh</a>
             <a href="#" id="nav-settings" onclick="switchTab('settings')" class="nav-link flex items-center gap-3 px-4 py-2.5 rounded hover:bg-red-700 transition"><i class="fas fa-cog w-5"></i> Cài đặt & Đồng bộ</a>
-        </nav>
 
         <div class="pt-6 border-t border-red-700 mt-auto">
             <button onclick="openLoginModal()" class="w-full bg-red-900 hover:bg-red-950 text-white py-2 rounded text-sm font-semibold flex items-center justify-center gap-2">
@@ -81,12 +80,10 @@
         </div>
     </aside>
 
-    <!-- Main Content Area -->
-<main class="flex-1 p-4 md:p-8 overflow-y-auto">
-
+   <main class="flex-1 p-4 md:p-8 overflow-y-auto">
         <!-- Tab 1: Dashboard -->
-        <section id="page-dashboard" class="page-content space-y-6">
-            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">📊 Bảng Điều Khiển Tổng Quan</h2>
+        <section id="page-dashboard" class="page-content active space-y-6">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">Bảng Điều Khiển Tổng Quan</h2>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-5 rounded-lg shadow border-l-4 border-blue-500 flex items-center justify-between">
                     <div>
@@ -122,7 +119,7 @@
         <!-- Tab 2: Võ Sinh -->
         <section id="page-students" class="page-content space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-2xl font-bold text-gray-800">♙ Danh Sách Võ Sinh</h2>
+                <h2 class="text-2xl font-bold text-gray-800">Danh Sách Võ Sinh</h2>
                 <button class="bg-red-700 text-white px-4 py-2 rounded shadow hover:bg-red-800"><i class="fas fa-plus mr-1"></i> Thêm Võ Sinh</button>
             </div>
             <div class="bg-white rounded-lg shadow overflow-x-auto">
@@ -132,22 +129,33 @@
 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mã VS</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Họ & Tên</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cấp Đai</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lớp Học</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SĐT Phụ Huynh</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng Thái</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
-                        <tr><td colspan="6" class="px-4 py-4 text-center text-gray-400">Chưa có dữ liệu võ sinh.</td></tr>
+                        <tr><td colspan="4" class="px-4 py-4 text-center text-gray-400">Chưa có dữ liệu võ sinh.</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
 
-        <!-- Tab 3: Điểm danh -->
-        <section id="page-attendance" class="page-content space-y-4">
-            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">✓ Điểm Danh Chuyên Cần</h2>
-            <div class="bg-white p-4 rounded-lg shadow space-y-3">
+        <!-- Tab: Cài đặt & Đồng bộ -->
+        <section id="page-settings" class="page-content space-y-6">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">⚙ Cài Đặt & Đồng Bộ Supabase</h2>
+            <div class="bg-white p-6 rounded-lg shadow max-w-xl space-y-4">
+                <h3 class="font-bold text-gray-700">Cấu Hình Kết Nối Supabase Cloud</h3>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600">Supabase URL</label>
+                    <input type="text" id="cfg-supabase-url" placeholder="https://xyz.supabase.co" class="mt-1 w-full border rounded p-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-600">Supabase Anon Key</label>
+                    <input type="password" id="cfg-supabase-key" placeholder="eyJhbGciOi..." class="mt-1 w-full border rounded p-2">
+                </div>
+                <button onclick="saveSupabaseConfig()" class="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700">Lưu Cấu Hình</button>
+            </div>
+        </section>
+    </main>
 <script>
     // Mật khẩu phân quyền hệ thống
     const PASSWORDS = {
