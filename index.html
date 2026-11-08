@@ -148,3 +148,70 @@
         <section id="page-attendance" class="page-content space-y-4">
             <h2 class="text-2xl font-bold text-gray-800 border-b pb-2">✓ Điểm Danh Chuyên Cần</h2>
             <div class="bg-white p-4 rounded-lg shadow space-y-3">
+<script>
+    // Mật khẩu phân quyền hệ thống
+    const PASSWORDS = {
+        admin: "30112004",
+        coach: "hlv123"
+    };
+
+    let currentRole = "parent";
+
+    window.addEventListener('DOMContentLoaded', () => {
+        applyPermissions();
+    });
+
+    // Hàm hiển thị ô nhập mật khẩu khi chọn Admin hoặc HLV
+    function togglePasswordField() {
+        const role = document.getElementById('role-select').value;
+        const passContainer = document.getElementById('pass-container');
+        if (role === 'parent') {
+            passContainer.classList.add('hidden');
+        } else {
+            passContainer.classList.remove('hidden');
+        }
+    }
+
+    function handleLogin() {
+        const role = document.getElementById('role-select').value;
+        const inputPass = document.getElementById('login-pass').value.trim();
+
+        if (role === 'admin' && inputPass !== PASSWORDS.admin) {
+            alert('Mật khẩu Quản lý không đúng!');
+            return;
+        }
+        if (role === 'coach' && inputPass !== PASSWORDS.coach) {
+            alert('Mật khẩu HLV không đúng!');
+            return;
+        }
+
+        currentRole = role;
+        document.getElementById('login-modal').classList.add('hidden');
+        document.getElementById('login-pass').value = '';
+        applyPermissions();
+    }
+
+    function applyPermissions() {
+        const roleLabels = { parent: 'Phụ huynh', coach: 'Huấn luyện viên', admin: 'Quản lý (Admin)' };
+        document.getElementById('current-role-badge').innerText = 'Quyền: ' + roleLabels[currentRole];
+        document.getElementById('current-role-badge-mobile').innerText = roleLabels[currentRole];
+        
+        // Mở khóa giao diện theo quyền tương ứng
+        switchTab(currentRole === 'parent' ? 'parent' : (currentRole === 'coach' ? 'attendance' : 'dashboard'));
+    }
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.page-content').forEach(el => el.classList.remove('active'));
+        const target = document.getElementById('page-' + tabId);
+        if (target) target.classList.add('active');
+        document.getElementById('sidebar').classList.add('-translate-x-full');
+    }
+
+    document.getElementById('menu-btn').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('-translate-x-full');
+    });
+
+    function openLoginModal() {
+        document.getElementById('login-modal').classList.remove('hidden');
+    }
+</script>
