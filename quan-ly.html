@@ -1148,27 +1148,29 @@ async function resetTrialData(){
   return toast('Cần đăng nhập Admin Supabase và tải dữ liệu máy chủ trước khi xóa.');
  }
  if(cloudConflict)return toast('Đang có xung đột dữ liệu. Hãy xử lý xung đột trước khi làm sạch.');
+ const originalDb=structuredClone(db);
  const studentIds=new Set((db.students||[]).map(s=>String(s.id)));
- const studentCodes=new Set((db.students||[]).map(s=>String(s.id)));
- const countLinked=(arr)=>Array.isArray(arr)?arr.filter(x=>studentIds.has(String(x.studentId))||studentCodes.has(String(x.studentCode))).length:0;
- const counts={students:studentIds.size,attendance:Object.values(db.attendance||{}).reduce((n,day)=>n+Object.keys(day||{}).filter(id=>studentIds.has(String(id))).length,0),grades:countLinked(db.grades),examRows:(db.examSheets||[]).reduce((n,x)=>n+(x.rows||[]).filter(r=>studentIds.has(String(r.studentId))).length,0),fund:countLinked(db.classFund),photos:countLinked(db.photos),achievements:countLinked(db.achievements),notices:countLinked(db.notices)};
- const summary=`CHỈ XÓA DỮ LIỆU GẮN VỚI HỒ SƠ VÕ SINH (${counts.students} hồ sơ):\n• Hồ sơ võ sinh và dữ liệu điểm danh gắn với mã võ sinh (${counts.attendance} lượt)\n• Nhận xét tháng nằm trong hồ sơ võ sinh\n• Điểm kiểm tra, dòng kết quả thi và ghi nhận quỹ lớp gắn trực tiếp với võ sinh\n• Ảnh/thành tích/thông báo chỉ khi có mã võ sinh liên kết\n\nGIỮ NGUYÊN toàn bộ dữ liệu khác: đăng ký chưa duyệt, lớp, lịch học, tài khoản, phân quyền, cài đặt, thông báo chung, ảnh sự kiện/thư viện chung, quỹ lớp không gắn hồ sơ, toàn bộ sổ giao dịch và dữ liệu học phí/SePay, báo cáo, cấu hình và webhook. Mã võ sinh đã cấp được giữ làm mốc, không tái sử dụng.\n\nHệ thống tải bản sao lưu JSON trước khi xóa.`;
+ const studentCodes=new Set((db.students||[]).flatMap(s=>[s.id,s.studentCode,s.student_code,s.code].filter(Boolean).map(String)));
+ const isStudentLinked=x=>studentIds.has(String(x?.studentId??x?.student_id??''))||studentCodes.has(String(x?.studentCode??x?.student_code??''));
+ const countLinked=arr=>Array.isArray(arr)?arr.filter(isStudentLinked).length:0;
+ const counts={students:studentIds.size,attendance:Object.values(db.attendance||{}).reduce((n,day)=>n+Object.keys(day||{}).filter(id=>studentIds.has(String(id))).length,0),grades:countLinked(db.grades),examRows:(db.examSheets||[]).reduce((n,x)=>n+(x.rows||[]).filter(isStudentLinked).length,0),fund:countLinked(db.classFund),photos:countLinked(db.photos),achievements:countLinked(db.achievements),notices:countLinked(db.notices),events:countLinked(db.centerEvents),libraryImages:countLinked(db.libraryImages)};
+ const summary=`CHỈ XÓA DỮ LIỆU GẮN VỚI HỒ SƠ VÕ SINH (${counts.students} hồ sơ):\n• Hồ sơ võ sinh và dữ liệu điểm danh gắn với mã võ sinh (${counts.attendance} lượt)\n• Nhận xét tháng nằm trong hồ sơ võ sinh\n• Điểm kiểm tra, dòng kết quả thi và ghi nhận quỹ lớp gắn trực tiếp với võ sinh\n• Ảnh/thành tích/thông báo/sự kiện/thư viện chỉ khi có mã võ sinh liên kết\n\nGIỮ NGUYÊN toàn bộ dữ liệu khác: đăng ký chưa duyệt, lớp, lịch học, tài khoản, phân quyền, cài đặt, thông báo chung, ảnh sự kiện/thư viện chung, quỹ lớp không gắn hồ sơ, toàn bộ sổ giao dịch và dữ liệu học phí/SePay, báo cáo, cấu hình và webhook. Mã võ sinh đã cấp được giữ làm mốc, không tái sử dụng.\n\nHệ thống tải bản sao lưu JSON trước khi xóa.`;
  if(!confirm(summary))return;
  if(!confirm('XÁC NHẬN LẦN CUỐI: Chỉ xóa hồ sơ võ sinh và dữ liệu liên kết trực tiếp; giữ nguyên mọi dữ liệu khác?'))return;
  try{
-  download('dao-vu-truoc-khi-xoa-du-lieu-vo-sinh-'+today()+'.json',JSON.stringify(db,null,2),'application/json');
+  download('dao-vu-truoc-khi-xoa-du-lieu-vo-sinh-'+today()+'.json',JSON.stringify(originalDb,null,2),'application/json');
   const oldMax=nextStudentSequence()-1;
   db.studentSequenceFloor=Math.max(Number(db.studentSequenceFloor)||0,oldMax);
   db.students=[];
   Object.keys(db.attendance||{}).forEach(k=>{const day=db.attendance[k]||{};studentIds.forEach(id=>delete day[id]);if(!Object.keys(day).length)delete db.attendance[k]});
-  db.grades=(db.grades||[]).filter(x=>!studentIds.has(String(x.studentId)));
-  db.examSheets=(db.examSheets||[]).map(x=>({...x,rows:(x.rows||[]).filter(r=>!studentIds.has(String(r.studentId)))}));
-  db.classFund=(db.classFund||[]).filter(x=>!studentIds.has(String(x.studentId)));
-  db.photos=(db.photos||[]).filter(x=>!studentIds.has(String(x.studentId))&&!studentCodes.has(String(x.studentCode)));
-  db.achievements=(db.achievements||[]).filter(x=>!studentIds.has(String(x.studentId))&&!studentCodes.has(String(x.studentCode)));
-  db.notices=(db.notices||[]).filter(x=>!studentIds.has(String(x.studentId))&&!studentCodes.has(String(x.studentCode)));
-  db.centerEvents=(db.centerEvents||[]).filter(x=>!studentIds.has(String(x.studentId))&&!studentCodes.has(String(x.studentCode)));
-  db.libraryImages=(db.libraryImages||[]).filter(x=>!studentIds.has(String(x.studentId))&&!studentCodes.has(String(x.studentCode)));
+  db.grades=(db.grades||[]).filter(x=>!isStudentLinked(x));
+  db.examSheets=(db.examSheets||[]).map(x=>({...x,rows:(x.rows||[]).filter(r=>!isStudentLinked(r))}));
+  db.classFund=(db.classFund||[]).filter(x=>!isStudentLinked(x));
+  db.photos=(db.photos||[]).filter(x=>!isStudentLinked(x));
+  db.achievements=(db.achievements||[]).filter(x=>!isStudentLinked(x));
+  db.notices=(db.notices||[]).filter(x=>!isStudentLinked(x));
+  db.centerEvents=(db.centerEvents||[]).filter(x=>!isStudentLinked(x));
+  db.libraryImages=(db.libraryImages||[]).filter(x=>!isStudentLinked(x));
   // Giữ nguyên đăng ký chưa duyệt, giao dịch tài chính, sổ SePay, cấu hình và mọi dữ liệu không gắn trực tiếp với võ sinh.
   save(false,false);
   if(window.__daoVuPendingSave)await window.__daoVuPendingSave;
@@ -1177,9 +1179,7 @@ async function resetTrialData(){
   await uploadCloudSnapshot();
   const expected=JSON.stringify(db);
   const verified=await fetchCloudRow();
-  if(!verified?.payload||JSON.stringify(verified.payload)!==expected){
-   throw Error('Supabase chưa xác nhận đúng snapshot. Không được coi là đã xóa hoàn tất. Hãy tải lại dữ liệu Internet và kiểm tra đồng bộ.');
-  }
+  if(!verified?.payload||JSON.stringify(verified.payload)!==expected)throw Error('Supabase chưa xác nhận đúng snapshot. Không được coi là đã xóa hoàn tất. Cần kiểm tra trạng thái máy chủ trước khi thao tác lại.');
   lastCloudSnapshotJson=snapshotFingerprint(expected);
   localStorage.setItem(SB_LAST_SYNC_KEY,lastCloudSnapshotJson);
   lastCloudUpdatedAt=verified.updated_at||lastCloudUpdatedAt;
@@ -1187,8 +1187,10 @@ async function resetTrialData(){
   cloudMsg('Đã xác minh xóa hồ sơ võ sinh và dữ liệu liên kết trực tiếp. Các dữ liệu khác được giữ nguyên.');
   toast('Đã xóa và xác minh dữ liệu võ sinh trên máy chủ.');
  }catch(e){
+  // Khôi phục dữ liệu trên thiết bị; không tự ghi đè ngược lên cloud khi trạng thái máy chủ chưa rõ.
+  db=originalDb;save(false,false);renderAll();
   console.error('Xóa dữ liệu võ sinh thất bại:',e);
-  cloudMsg('CHƯA XÁC MINH ĐƯỢC VIỆC XÓA TRÊN MÁY CHỦ: '+(e.message||e));
+  cloudMsg('CHƯA XÁC MINH ĐƯỢC VIỆC XÓA TRÊN MÁY CHỦ. Bản dữ liệu trên thiết bị đã được khôi phục; không thao tác xóa lần nữa cho đến khi đối chiếu bản Internet. Chi tiết: '+(e.message||e));
   toast('Không thể xác nhận xóa trên Supabase: '+(e.message||e));
  }
 }
