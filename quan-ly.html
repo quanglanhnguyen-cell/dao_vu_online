@@ -693,7 +693,7 @@ function vietQrUrl(bank,amount,memo){if(!bank)return '';return 'https://img.viet
 function classFundQrHtml(classInfo){const bank=qrBankForClass(classInfo,'fund');if(!bank)return '<div class="notice">Lớp này chưa được cấu hình tài khoản QR của HLV. Quỹ lớp chỉ chuyển vào tài khoản HLV; vui lòng yêu cầu Admin cập nhật tài khoản trước khi thu.</div>';return `<div class="notice info"><b>Tài khoản nhận quỹ lớp · ${esc(classInfo.name||'')}</b><br>Người nhận: HLV ${esc(classInfo.coach||'')} · ${esc(bank.bankName)} · ${esc(bank.account)} · ${esc(bank.accountName)}<br><small>QR riêng của từng võ sinh sẽ được tạo trong thông báo thu quỹ, với nội dung chuyển khoản theo mẫu QL.MÃ_VÕ_SINH.NĂM (ví dụ: QL.DvK001.2026). Quỹ lớp chuyển trực tiếp vào tài khoản HLV phụ trách, không dùng tài khoản Admin.</small></div>`}
 function className(id){return db.classes.find(c=>c.id===id)?.name||'Chưa xếp lớp'}
 // Mã võ sinh: Dv + chữ cái đầu lớp nhập học + số thứ tự toàn Trung tâm.
-// Số thứ tự được tính trên toàn bộ hồ sơ, kể cả hồ sơ đã nghỉ, nên không tái sử dụng mã cũ.
+// Sau khi Admin chạy thao tác làm sạch mã số đã duyệt, bộ đếm được đặt về 0 để cấp mã mới từ 001.
 function studentClassInitial(classId){const name=String(db.classes.find(c=>String(c.id)===String(classId))?.name||'').trim();if(!name)return '';const normalized=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();const first=(normalized.match(/[A-Z]/)||[])[0]||'';return first;}
 function nextStudentSequence(){let max=Number(db._studentCodeSequenceFloor)||0;for(const s of (db.students||[])){const m=String(s.id||'').match(/^Dv[A-Z](\d+)$/i);if(m)max=Math.max(max,Number(m[1])||0);}for(const code of (Array.isArray(db._retiredStudentCodes)?db._retiredStudentCodes:[])){const m=String(code||'').match(/^Dv[A-Z](\d+)$/i);if(m)max=Math.max(max,Number(m[1])||0);}return max+1;}
 function generateStudentCode(classId){const initial=studentClassInitial(classId);if(!initial)throw Error('Vui lòng chọn lớp trước khi cấp mã võ sinh.');const seq=nextStudentSequence();const code='Dv'+initial+String(seq).padStart(3,'0');if((db.students||[]).some(s=>String(s.id).toLowerCase()===code.toLowerCase()))throw Error('Mã dự kiến đã tồn tại. Hãy đồng bộ dữ liệu Internet rồi thử lại.');return code;}
@@ -1510,7 +1510,7 @@ async function purgeAllStudentData(){
  if(role!=='admin')return toast('Chỉ Admin mới được thực hiện thao tác này.');
  if(!sbSession?.access_token||String(sbSession.user?.id||'')==='')return toast('Hãy đăng nhập tài khoản Admin Supabase trước khi xóa.');
  if(cloudBusy||cloudConflict)return toast('Đang đồng bộ hoặc có xung đột dữ liệu. Chưa xóa bất kỳ dữ liệu nào.');
- const ok=confirm('XÓA THEO PHẠM VI ĐÃ DUYỆT?\n\nSẽ xóa: toàn bộ hồ sơ võ sinh và dữ liệu cá nhân/học tập liên kết; khoản thanh toán gắn với các võ sinh đó; TOÀN BỘ quỹ lớp; TOÀN BỘ ảnh thư viện; các yêu cầu đăng ký có trạng thái Từ chối.\n\nGiữ nguyên: 4 lớp và thông tin HLV, lịch lớp, cài đặt, logo, tài khoản, phân quyền, giao dịch không liên quan, yêu cầu đăng ký chưa bị từ chối và mọi dữ liệu chung ngoài phạm vi trên.\n\nHệ thống tải bản sao lưu đầy đủ trước khi ghi lên Supabase, sau đó đọc lại để xác minh. Tiếp tục?');
+ const ok=confirm('XÓA HỒ SƠ VÀ ĐẶT LẠI MÃ SỐ TỪ ĐẦU?\n\nSẽ xóa: toàn bộ hồ sơ võ sinh và dữ liệu cá nhân/học tập liên kết; khoản thanh toán gắn với các võ sinh đó; TOÀN BỘ quỹ lớp; TOÀN BỘ ảnh thư viện; các yêu cầu đăng ký có trạng thái Từ chối.\n\nĐẶT LẠI MÃ SỐ: xóa danh sách mã đã cấp/lưu trữ và bộ đếm cũ trên dữ liệu Supabase. Võ sinh đăng ký mới sẽ được cấp số thứ tự bắt đầu từ 001 (ví dụ DvK001), chạy liên tục toàn Trung tâm.\n\nGiữ nguyên: 4 lớp và thông tin HLV, lịch lớp, cài đặt, logo, tài khoản, phân quyền, giao dịch không liên quan, yêu cầu đăng ký chưa bị từ chối và mọi dữ liệu chung ngoài phạm vi trên.\n\nHệ thống tải bản sao lưu đầy đủ trước khi ghi lên Supabase, sau đó đọc lại để xác minh. Tiếp tục?');
  if(!ok)return;
  const typed=prompt('Xác nhận lần cuối. Nhập chính xác: XOA DU LIEU DA CHOT');
  if(typed!=='XOA DU LIEU DA CHOT')return toast('Đã hủy. Không có dữ liệu nào bị xóa.');
@@ -1531,12 +1531,9 @@ async function purgeAllStudentData(){
    const countLinked=a=>(Array.isArray(a)?a:[]).filter(linked).length;
    const rejectedRequest=x=>{const v=String(x?.status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();return ['tu choi','rejected','declined'].includes(v)};
    const counts={students:students.length,payments:countLinked(working.payments),attendance:0,grades:countLinked(working.grades),examRows:0,photos:countLinked(working.photos),achievements:countLinked(working.achievements),notices:countLinked(working.notices),centerEvents:countLinked(working.centerEvents),classFund:Array.isArray(working.classFund)?working.classFund.length:0,libraryImages:Array.isArray(working.libraryImages)?working.libraryImages.length:0,registrationRequests:(Array.isArray(working.registrationRequests)?working.registrationRequests:[]).filter(rejectedRequest).length};
-   // Preserve every issued code permanently and keep the global sequence above the highest deleted code.
-   const retired=new Set(Array.isArray(working._retiredStudentCodes)?working._retiredStudentCodes:[]);
-   codes.forEach(c=>retired.add(c));
-   working._retiredStudentCodes=Array.from(retired);
-   const maxDeleted=Array.from(codes).reduce((m,c)=>Math.max(m,Number((c.match(/(\d+)$/)||[])[1])||0),0);
-   working._studentCodeSequenceFloor=Math.max(Number(working._studentCodeSequenceFloor)||0,maxDeleted);
+   // Làm sạch toàn bộ mã cũ và bộ đếm trong snapshot Supabase để lần cấp mã tiếp theo bắt đầu ở 001.
+   working._retiredStudentCodes=[];
+   working._studentCodeSequenceFloor=0;
    working.students=[];
    if(working.attendance&&typeof working.attendance==='object')Object.keys(working.attendance).forEach(k=>{const v=working.attendance[k];if(v&&typeof v==='object'&&!Array.isArray(v)){ids.forEach(id=>{if(Object.prototype.hasOwnProperty.call(v,id)){counts.attendance++;delete v[id]}});codes.forEach(code=>{if(Object.prototype.hasOwnProperty.call(v,code)){counts.attendance++;delete v[code]}})}});
    working.grades=(Array.isArray(working.grades)?working.grades:[]).filter(x=>!linked(x));
@@ -1557,10 +1554,11 @@ async function purgeAllStudentData(){
    await uploadCloudSnapshot();
    const verify=await fetchCloudRow();
    if(!verify?.payload||JSON.stringify(verify.payload)!==JSON.stringify(db))throw Error('Đã gửi dữ liệu nhưng đọc lại Supabase không khớp. Giữ tệp sao lưu để đối chiếu; chưa xác nhận hoàn tất.');
+   if((verify.payload.students||[]).length!==0||(verify.payload._retiredStudentCodes||[]).length!==0||Number(verify.payload._studentCodeSequenceFloor||0)!==0)throw Error('Supabase chưa xác nhận trạng thái mã số đã được đặt lại. Giữ tệp sao lưu để đối chiếu; chưa xác nhận hoàn tất.');
    rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=verify.updated_at||null;
    pendingRemoteRow=null;cloudConflict=false;renderAll();
-   cloudMsg('Đã hoàn tất và xác minh Supabase. Đã xóa '+counts.students+' hồ sơ võ sinh, '+counts.payments+' khoản thanh toán liên quan, toàn bộ quỹ lớp ('+counts.classFund+'), ảnh thư viện ('+counts.libraryImages+') và '+counts.registrationRequests+' yêu cầu đăng ký bị từ chối. Đã giữ nguyên lớp, HLV, cài đặt, tài khoản, phân quyền và dữ liệu ngoài phạm vi.');
-   toast('Đã xóa theo phạm vi đã duyệt và xác minh đồng bộ thành công.');
+   cloudMsg('Đã hoàn tất và xác minh Supabase. Đã xóa '+counts.students+' hồ sơ võ sinh, toàn bộ mã số cũ và bộ đếm cũ; số thứ tự mới đã đặt về 001. Đã xóa '+counts.payments+' khoản thanh toán liên quan, toàn bộ quỹ lớp ('+counts.classFund+'), ảnh thư viện ('+counts.libraryImages+') và '+counts.registrationRequests+' yêu cầu đăng ký bị từ chối. Đã giữ nguyên lớp, HLV, cài đặt, tài khoản, phân quyền và dữ liệu ngoài phạm vi.');
+   toast('Đã xóa theo phạm vi đã duyệt; mã số mới sẽ bắt đầu từ 001.');
  }catch(e){cloudMsg('Không hoàn tất thao tác xóa: '+e.message);toast('Đã dừng thao tác: '+e.message);}
 }
 function resetData(){if(confirm('Khôi phục dữ liệu mẫu? Dữ liệu hiện tại sẽ bị thay thế. Hãy xuất bản sao lưu trước nếu cần.')){db=structuredClone(seed);save();renderAll();toast('Đã khôi phục dữ liệu mẫu')}}
