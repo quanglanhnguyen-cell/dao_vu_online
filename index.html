@@ -1289,7 +1289,60 @@ if(!localStorage.getItem(DAO_VU_BANNER_SETUP_KEY)){
   data.heroImage=data.heroImages[0]||"";
   data.slideIndex=Math.min(Number(data.slideIndex)||0,Math.max(0,data.heroImages.length-1));
 }
-function render(){const hero=document.querySelector(".hero");if(!hero)return;const slides=(data.heroImages||[]).filter(Boolean).slice(0,3);data.heroImages=slides;const current=slides[data.slideIndex||0]||"";if(current){hero.style.setProperty("--hero-image",`url("${current}")`);hero.classList.add("has-banner");}else{hero.style.removeProperty("--hero-image");hero.classList.remove("has-banner");}const slideCountEl=document.getElementById("slideCount");if(slideCountEl)slideCountEl.textContent=slides.length?`Ảnh ${(data.slideIndex||0)+1}/${slides.length}`:"Chưa có ảnh · tối đa 3 ảnh";hero.style.backgroundPosition="center center,center center";hero.style.filter="none";hero.style.setProperty("--hero-dim",String((data.heroBrightness??100)/100));if(data.logoImage){document.getElementById("heroLogoImg").src=data.logoImage;document.getElementById("heroLogoBadge").style.display="block";document.getElementById("logoMark").innerHTML=`<img src="${data.logoImage}" alt="Logo Đạo Vũ" style="width:100%;height:100%;object-fit:contain;border-radius:12px">`;}else{document.getElementById("heroLogoBadge").style.display="none";document.getElementById("logoMark").textContent="ĐV";}const cards=[...document.querySelectorAll(".program")];["karate","football","swimming","finger","balance"].forEach((k,i)=>{if(data.programImages&&data.programImages[k])cards[i].querySelector("img").src=data.programImages[k];});if(data.activityImages&&data.activityImages.length){document.querySelectorAll(".activity img").forEach((im,i)=>{if(data.activityImages[i])im.src=data.activityImages[i];});}["karate","football","swimming","finger","balance"].forEach(k=>{const el=document.getElementById("slogan-"+k);const value=(data[k]||"").trim();el.textContent=value?(value.startsWith("“")?value:"“"+value+"”"):"";el.style.display=value?"block":"none";});document.getElementById("centerName").textContent=data.name;document.getElementById("footName").textContent=data.name;document.getElementById("headerSlogan").textContent=data.slogan;document.getElementById("footSlogan").textContent=data.slogan;document.getElementById("address").textContent=data.address;document.getElementById("phone").textContent=data.phone;document.getElementById("email").textContent=data.email;document.getElementById("hours").textContent=data.hours;document.getElementById("social").textContent=data.social;document.getElementById("aboutText").textContent=data.about;document.getElementById("topContact").textContent="☎ "+data.phone;document.getElementById("footContact").textContent=data.address+" · "+data.phone;const m=document.getElementById("mapLink");m.href=data.map||"https://www.google.com/maps/dir/?api=1&destination=14.35980448604047%2C107.99627671030058";m.style.opacity="1";m.style.pointerEvents="auto";
+function render(){
+  const get=id=>document.getElementById(id);
+  const setText=(id,value)=>{const el=get(id);if(el)el.textContent=value??"";};
+  const hero=document.querySelector(".hero");
+  const slides=(data.heroImages||[]).filter(Boolean).slice(0,3);
+  data.heroImages=slides;
+  const current=slides[data.slideIndex||0]||"";
+  if(hero){
+    if(current){hero.style.setProperty("--hero-image",`url("${current}")`);hero.classList.add("has-banner");}
+    else{hero.style.removeProperty("--hero-image");hero.classList.remove("has-banner");}
+    hero.style.backgroundPosition="center center,center center";
+    hero.style.filter="none";
+    hero.style.setProperty("--hero-dim",String((data.heroBrightness??100)/100));
+  }
+  const slideCount=get("slideCount");
+  if(slideCount)slideCount.textContent=slides.length?`Ảnh ${(data.slideIndex||0)+1}/${slides.length}`:"Chưa có ảnh · tối đa 3 ảnh";
+  const heroLogoImg=get("heroLogoImg"),heroLogoBadge=get("heroLogoBadge"),logoMark=get("logoMark");
+  if(data.logoImage){
+    if(heroLogoImg)heroLogoImg.src=data.logoImage;
+    if(heroLogoBadge)heroLogoBadge.style.display="block";
+    if(logoMark)logoMark.innerHTML=`<img src="${data.logoImage}" alt="Logo Đạo Vũ" style="width:100%;height:100%;object-fit:contain;border-radius:12px">`;
+  }else{
+    if(heroLogoBadge)heroLogoBadge.style.display="none";
+    if(logoMark)logoMark.textContent="ĐV";
+  }
+  const cards=[...document.querySelectorAll(".program")];
+  ["karate","football","swimming","finger","balance"].forEach((k,i)=>{
+    const img=cards[i]?.querySelector("img");
+    if(img&&data.programImages&&data.programImages[k])img.src=data.programImages[k];
+  });
+  if(data.activityImages&&data.activityImages.length){
+    document.querySelectorAll(".activity img").forEach((im,i)=>{if(data.activityImages[i])im.src=data.activityImages[i];});
+  }
+  ["karate","football","swimming","finger","balance"].forEach(k=>{
+    const el=get("slogan-"+k);
+    if(!el)return;
+    const value=(data[k]||"").trim();
+    el.textContent=value?(value.startsWith("“")?value:"“"+value+"”"):"";
+    el.style.display=value?"block":"none";
+  });
+  setText("centerName",data.name);
+  setText("footName",data.name);
+  setText("headerSlogan",data.slogan);
+  setText("footSlogan",data.slogan);
+  setText("address",data.address);
+  setText("phone",data.phone);
+  setText("email",data.email);
+  setText("hours",data.hours);
+  setText("social",data.social);
+  setText("aboutText",data.about);
+  setText("topContact","☎ "+(data.phone||""));
+  setText("footContact",(data.address||"")+" · "+(data.phone||""));
+  const m=get("mapLink");
+  if(m){m.href=data.map||"https://www.google.com/maps/dir/?api=1&destination=14.35980448604047%2C107.99627671030058";m.style.opacity="1";m.style.pointerEvents="auto";}
 courseKeys.forEach(k=>{
   const card=document.querySelector('.program #slogan-'+k)?.closest('.program');
   if(!card)return;
