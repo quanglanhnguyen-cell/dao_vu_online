@@ -1763,12 +1763,21 @@ function downloadGalleryImage(src,name){const a=document.createElement('a');a.hr
  function enhancePanels(root=document){
   root.querySelectorAll('.section').forEach((section,si)=>{
    const panels=[...section.querySelectorAll('.panel')];panels.forEach((panel,i)=>{
-    const head=panel.querySelector(':scope > .panel-head');if(!head||head.querySelector('.panel-toggle'))return;
-    const key='dv-panel-'+(section.id||si)+'-'+i;panel.dataset.collapseKey=key;
-    let collapsed=i>0;try{const saved=localStorage.getItem(key);if(saved!==null)collapsed=saved==='1'}catch(e){}
-    panel.classList.toggle('is-collapsed',collapsed);
-    const btn=document.createElement('button');btn.type='button';btn.className='panel-toggle';btn.setAttribute('aria-label',collapsed?'Mở rộng nội dung':'Thu gọn nội dung');btn.setAttribute('aria-expanded',collapsed?'false':'true');btn.textContent=collapsed?'▾':'▴';
-    btn.addEventListener('click',()=>{const close=panel.classList.toggle('is-collapsed');btn.textContent=close?'▾':'▴';btn.setAttribute('aria-expanded',close?'false':'true');btn.setAttribute('aria-label',close?'Mở rộng nội dung':'Thu gọn nội dung');try{localStorage.setItem(key,close?'1':'0')}catch(e){}});head.appendChild(btn);
+    const head=panel.querySelector(':scope > .panel-head');if(!head)return;
+    const key=panel.dataset.collapseKey||('dv-panel-'+(section.id||si)+'-'+i);panel.dataset.collapseKey=key;
+    let btn=head.querySelector('.panel-toggle');
+    if(!btn){
+     let collapsed=i>0;try{const saved=localStorage.getItem(key);if(saved!==null)collapsed=saved==='1'}catch(e){}
+     panel.classList.toggle('is-collapsed',collapsed);
+     btn=document.createElement('button');btn.type='button';btn.className='panel-toggle';head.appendChild(btn);
+    }
+    const syncButton=()=>{const closed=panel.classList.contains('is-collapsed');btn.textContent=closed?'▾':'▴';btn.setAttribute('aria-expanded',closed?'false':'true');btn.setAttribute('aria-label',closed?'Mở rộng nội dung':'Thu gọn nội dung')};
+    syncButton();
+    // Các nút có sẵn trong HTML trước đây chỉ có giao diện, chưa được gắn click handler.
+    if(btn.dataset.toggleBound!=='1'){
+     btn.dataset.toggleBound='1';
+     btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();panel.classList.toggle('is-collapsed');syncButton();try{localStorage.setItem(key,panel.classList.contains('is-collapsed')?'1':'0')}catch(err){}});
+    }
    });
   });
  }
@@ -1881,7 +1890,7 @@ setPage=function(page){if(page==='exams'&&role!=='admin'){toast('Chỉ Admin đ�
 const _dvOriginalHandleRoleSelect=handleRoleSelect;
 handleRoleSelect=async function(e){if(e.target.value==='judge'){role='judge';document.body.classList.remove('coach-mode','parent-mode');document.body.classList.add('judge-mode');$('#welcomeTitle').textContent='Khu vực Ban khảo thí';$('#userAvatar').textContent='KT';applyRole();setPage('judge');return}return _dvOriginalHandleRoleSelect(e)};
 $('#roleSelect').onchange=handleRoleSelect;
-if('serviceWorker' in navigator && location.protocol.startsWith('http')){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));}
+// Không đăng ký Service Worker khi repository không có sw.js; tránh yêu cầu 404 không cần thiết.
 // Đạo Vũ: trung tâm thông báo, báo cáo HLV và hội thoại phụ huynh (API kiểm tra quyền phía máy chủ).
 async function dvApi(roleName,action,payload={}){
  const body={role:roleName,action,...payload};
@@ -1909,14 +1918,12 @@ function dvInstallStaffPanel(){
  }
  if(section.parentElement!==target)target.appendChild(section);
 }
-async function dvRefreshStaffPanel(){const host=document.getElementById('dvStaffContent');if(!host)return;try{if(role==='coach'){const [n,th]=await Promise.all([dvApi('coach','coach_notices'),dvApi('coach','coach_threads')]);host.innerHTML=`<div class="form-grid"><div class="field"><label>Loại báo cáo</label><select id="dvReportType"><option value="class_status">Tình hình lớp</option><option value="attendance">Điểm danh</option><option value="student_absence">Học viên vắng</option><option value="incident">Sự việc cần xử lý</option><option value="schedule_change">Thay đổi lịch</option><option value="class_fund">Quỹ lớp</option><option value="equipment">Cơ sở vật chất</option><option value="activity">Hoạt động</option><option value="other">Khác</option></select></div><div class="field"><label>Tiêu đề báo cáo</label><input id="dvReportTitle" placeholder="Nhập tiêu đề" /></div><div class="field full"><label>Nội dung báo cáo gửi Admin</label><textarea id="dvReportBody" rows="3" placeholder="Mô tả tình hình, đề xuất hoặc việc cần hỗ trợ..."></textarea></div><div class="field full"><label>Tệp đính kèm (văn bản, danh sách võ sinh, hình ảnh)</label><input id="dvReportFile" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,image/jpeg,image/png" onchange="dvReportFileChanged()"><small id="dvReportFileInfo" class="muted">Có thể đính kèm tối đa 5 tệp, mỗi tệp không quá 10 MB; tổng dung lượng không quá 25 MB.</small></div></div><button class="btn primary" onclick="dvSendCoachReport()">Gửi báo cáo về Admin</button><h4 style="margin-top:18px">Thông báo từ Admin</h4>${n.notifications.map(x=>`<div class="setting-box"><b>${dvEsc(x.title)}</b><p>${dvEsc(x.body)}</p><small>${new Date(x.created_at).toLocaleString('vi-VN')}</small></div>`).join('')||'<p class="empty">Chưa có thông báo mới.</p>'}<h4 style="margin-top:18px">Trao đổi phụ huynh được phân công</h4>${th.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.status)}</p><button class="btn small" onclick="dvCoachOpenThread('${t.id}')">Mở hội thoại</button><div id="dvCoachThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh được phân công cho lớp.</p>'}`;
- }else if(role==='admin'){const d=await dvApi('admin','admin_inbox');host.innerHTML=`<h4>Gửi thông báo / chỉ đạo</h4><div class="form-grid"><div class="field"><label>Đối tượng</label><select id="dvNoticeTarget"><option value="all_coaches">Tất cả HLV</option><option value="class">HLV một lớp</option><option value="all_parents">Tất cả phụ huynh</option><option value="student">Một phụ huynh / võ sinh</option></select></div><div class="field"><label>Mã lớp (nếu chọn một lớp)</label><input id="dvNoticeClass" placeholder="Mã lớp trên hệ thống" /></div><div class="field"><label>Mã võ sinh (nếu chọn một phụ huynh)</label><input id="dvNoticeStudent" placeholder="Ví dụ DvK001" /></div><div class="field"><label>Tiêu đề</label><input id="dvNoticeTitle" placeholder="Tiêu đề thông báo" /></div><div class="field full"><label>Nội dung</label><textarea id="dvNoticeBody" rows="3" placeholder="Nội dung chỉ đạo / lịch / thông báo..."></textarea></div></div><button class="btn primary" onclick="dvSendAdminNotice()">Gửi thông báo</button><h4 style="margin-top:20px">Báo cáo HLV gửi về</h4>${d.reports.map(x=>`<div class="setting-box"><b>${dvEsc(x.class_name||x.class_id)} · ${dvEsc(x.title)}</b><p>${dvEsc(x.content)}</p>${(Array.isArray(x.attachments)&&x.attachments.length)?x.attachments.map((a,i)=>a.url?`<p>📎 Tệp ${i+1}: <a href="${dvEsc(a.url)}" target="_blank" rel="noopener">${dvEsc(a.name||'Mở tệp đính kèm')}</a></p>`:`<p>📎 Tệp ${i+1}: ${dvEsc(a.name||'Tệp đính kèm')} <small>(Máy chủ chưa cung cấp đường dẫn tải)</small></p>`).join(''):(x.attachment_url?`<p>📎 <a href="${dvEsc(x.attachment_url)}" target="_blank" rel="noopener">${dvEsc(x.attachment_name||'Mở tệp đính kèm')}</a></p>`:(x.attachment_name?`<p>📎 ${dvEsc(x.attachment_name)} <small>(Máy chủ chưa cung cấp đường dẫn tải)</small></p>`:''))}<small>${new Date(x.created_at).toLocaleString('vi-VN')} · ${dvEsc(x.status)}</small></div>`).join('')||'<p class="empty">Chưa có báo cáo HLV.</p>'}<h4 style="margin-top:20px">Hội thoại phụ huynh</h4>${d.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.assigned_role==='coach'?'Phân công HLV':'Trung tâm / Admin')} · ${dvEsc(t.status)}</p><button class="btn small" onclick="dvAdminOpenThread('${t.id}')">Mở hội thoại</button><div id="dvAdminThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh.</p>'}`;
+async function dvRefreshStaffPanel(){const host=document.getElementById('dvStaffContent');if(!host)return;try{if(role==='coach'){const [n,th]=await Promise.all([dvApi('coach','coach_notices'),dvApi('coach','coach_threads')]);host.innerHTML=`<div class="form-grid"><div class="field"><label>Loại báo cáo</label><select id="dvReportType"><option value="class_status">Tình hình lớp</option><option value="attendance">Điểm danh</option><option value="student_absence">Học viên vắng</option><option value="incident">Sự việc cần xử lý</option><option value="schedule_change">Thay đổi lịch</option><option value="class_fund">Quỹ lớp</option><option value="equipment">Cơ sở vật chất</option><option value="activity">Hoạt động</option><option value="other">Khác</option></select></div><div class="field"><label>Tiêu đề báo cáo</label><input id="dvReportTitle" placeholder="Nhập tiêu đề" /></div><div class="field full"><label>Nội dung báo cáo gửi Admin</label><textarea id="dvReportBody" rows="3" placeholder="Mô tả tình hình, đề xuất hoặc việc cần hỗ trợ..."></textarea></div></div><button class="btn primary" onclick="dvSendCoachReport()">Gửi báo cáo về Admin</button><h4 style="margin-top:18px">Thông báo từ Admin</h4>${n.notifications.map(x=>`<div class="setting-box"><b>${dvEsc(x.title)}</b><p>${dvEsc(x.body)}</p><small>${new Date(x.created_at).toLocaleString('vi-VN')}</small></div>`).join('')||'<p class="empty">Chưa có thông báo mới.</p>'}<h4 style="margin-top:18px">Trao đổi phụ huynh được phân công</h4>${th.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.status)}</p><button class="btn small" onclick="dvCoachOpenThread('${t.id}')">Mở hội thoại</button><div id="dvCoachThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh được phân công cho lớp.</p>'}`;
+ }else if(role==='admin'){const d=await dvApi('admin','admin_inbox');host.innerHTML=`<h4>Gửi thông báo / chỉ đạo</h4><div class="form-grid"><div class="field"><label>Đối tượng</label><select id="dvNoticeTarget"><option value="all_coaches">Tất cả HLV</option><option value="class">HLV một lớp</option><option value="all_parents">Tất cả phụ huynh</option><option value="student">Một phụ huynh / võ sinh</option></select></div><div class="field"><label>Mã lớp (nếu chọn một lớp)</label><input id="dvNoticeClass" placeholder="Mã lớp trên hệ thống" /></div><div class="field"><label>Mã võ sinh (nếu chọn một phụ huynh)</label><input id="dvNoticeStudent" placeholder="Ví dụ DvK001" /></div><div class="field"><label>Tiêu đề</label><input id="dvNoticeTitle" placeholder="Tiêu đề thông báo" /></div><div class="field full"><label>Nội dung</label><textarea id="dvNoticeBody" rows="3" placeholder="Nội dung chỉ đạo / lịch / thông báo..."></textarea></div></div><button class="btn primary" onclick="dvSendAdminNotice()">Gửi thông báo</button><h4 style="margin-top:20px">Báo cáo HLV gửi về</h4>${d.reports.map(x=>`<div class="setting-box"><b>${dvEsc(x.class_name||x.class_id)} · ${dvEsc(x.title)}</b><p>${dvEsc(x.content)}</p><small>${new Date(x.created_at).toLocaleString('vi-VN')} · ${dvEsc(x.status)}</small></div>`).join('')||'<p class="empty">Chưa có báo cáo HLV.</p>'}<h4 style="margin-top:20px">Hội thoại phụ huynh</h4>${d.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.assigned_role==='coach'?'Phân công HLV':'Trung tâm / Admin')} · ${dvEsc(t.status)}</p><button class="btn small" onclick="dvAdminOpenThread('${t.id}')">Mở hội thoại</button><div id="dvAdminThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh.</p>'}`;
  }}catch(e){host.innerHTML='<div class="notice danger">Không tải được hộp thư: '+dvEsc(e.message)+'</div>';}}
 async function dvCoachOpenThread(id){try{const d=await dvApi('coach','thread_messages',{thread_id:id});const h=document.getElementById('dvCoachThread-'+id);h.innerHTML=d.messages.map(m=>`<p><b>${dvEsc(m.sender_role)}:</b> ${dvEsc(m.message)}</p>`).join('')+`<textarea id="dvCoachReply-${id}" rows="2" placeholder="Trả lời phụ huynh"></textarea><button class="btn small primary" onclick="dvCoachReply('${id}')">Gửi phản hồi</button>`}catch(e){toast(e.message)}}
 async function dvCoachReply(id){try{await dvApi('coach','reply_thread',{thread_id:id,message:document.getElementById('dvCoachReply-'+id).value});await dvCoachOpenThread(id);toast('Đã gửi phản hồi.')}catch(e){toast(e.message)}}
-function dvReportFileChanged(){const input=document.getElementById('dvReportFile'),info=document.getElementById('dvReportFileInfo'),files=[...(input?.files||[])];if(!info)return;if(!files.length){info.textContent='Có thể đính kèm tối đa 5 tệp, mỗi tệp không quá 10 MB; tổng dung lượng không quá 25 MB.';return}const total=files.reduce((n,f)=>n+f.size,0);if(files.length>5){input.value='';info.textContent='Chỉ được chọn tối đa 5 tệp.';toast('Mỗi báo cáo chỉ được đính kèm tối đa 5 tệp.');return}if(files.some(f=>f.size>10*1024*1024)){input.value='';info.textContent='Có tệp vượt quá 10 MB.';toast('Mỗi tệp đính kèm tối đa 10 MB.');return}if(total>25*1024*1024){input.value='';info.textContent='Tổng dung lượng vượt quá 25 MB.';toast('Tổng dung lượng các tệp tối đa 25 MB.');return}info.textContent='Đã chọn '+files.length+'/5 tệp · '+(total/1024/1024).toFixed(2)+' MB: '+files.map(f=>f.name).join('; ')}
-async function dvReadReportAttachment(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>{const value=String(r.result||'');resolve({name:file.name,mime_type:file.type||'application/octet-stream',size:file.size,base64:value.includes(',')?value.split(',')[1]:value})};r.onerror=()=>reject(Error('Không đọc được tệp '+file.name));r.readAsDataURL(file)})}
-async function dvSendCoachReport(){try{const input=document.getElementById('dvReportFile'),files=[...(input?.files||[])];const total=files.reduce((n,f)=>n+f.size,0);if(files.length>5)throw Error('Mỗi báo cáo chỉ được đính kèm tối đa 5 tệp.');if(files.some(f=>f.size>10*1024*1024))throw Error('Mỗi tệp đính kèm tối đa 10 MB.');if(total>25*1024*1024)throw Error('Tổng dung lượng các tệp tối đa 25 MB.');const payload={report_type:document.getElementById('dvReportType').value,title:document.getElementById('dvReportTitle').value,content:document.getElementById('dvReportBody').value};if(files.length)payload.attachments=await Promise.all(files.map(dvReadReportAttachment));await dvApi('coach','coach_report',payload);document.getElementById('dvReportTitle').value='';document.getElementById('dvReportBody').value='';if(input)input.value='';const info=document.getElementById('dvReportFileInfo');if(info)info.textContent='Có thể đính kèm tối đa 5 tệp, mỗi tệp không quá 10 MB; tổng dung lượng không quá 25 MB.';toast('Đã gửi báo cáo về Admin.');dvRefreshStaffPanel()}catch(e){toast('Không gửi được báo cáo: '+e.message)}}
+async function dvSendCoachReport(){try{await dvApi('coach','coach_report',{report_type:document.getElementById('dvReportType').value,title:document.getElementById('dvReportTitle').value,content:document.getElementById('dvReportBody').value});document.getElementById('dvReportTitle').value='';document.getElementById('dvReportBody').value='';toast('Đã gửi báo cáo về Admin.');dvRefreshStaffPanel()}catch(e){toast('Không gửi được báo cáo: '+e.message)}}
 async function dvSendAdminNotice(){try{await dvApi('admin','admin_notice',{target:document.getElementById('dvNoticeTarget').value,class_id:document.getElementById('dvNoticeClass').value,student_code:document.getElementById('dvNoticeStudent').value,title:document.getElementById('dvNoticeTitle').value,body:document.getElementById('dvNoticeBody').value});toast('Đã gửi thông báo.');dvRefreshStaffPanel()}catch(e){toast('Không gửi được: '+e.message)}}
 async function dvAdminOpenThread(id){try{const d=await dvApi('admin','thread_messages',{thread_id:id});const h=document.getElementById('dvAdminThread-'+id);h.innerHTML=d.messages.map(m=>`<p><b>${dvEsc(m.sender_role)}:</b> ${dvEsc(m.message)}</p>`).join('')+`<textarea id="dvAdminReply-${id}" rows="2" placeholder="Trả lời phụ huynh"></textarea><button class="btn small primary" onclick="dvAdminReply('${id}')">Gửi phản hồi</button>`}catch(e){toast(e.message)}}
 async function dvAdminReply(id){try{await dvApi('admin','reply_thread',{thread_id:id,message:document.getElementById('dvAdminReply-'+id).value});await dvAdminOpenThread(id);toast('Đã gửi phản hồi.')}catch(e){toast(e.message)}}
@@ -1938,99 +1945,6 @@ applyRole=function(){_dvOriginalApplyRoleForAssessmentMenu();syncAssessmentAdmin
 const _dvOriginalRenderAll=renderAll;
 renderAll=function(){_dvOriginalRenderAll();syncAssessmentAdminMenu()};
 syncAssessmentAdminMenu();
-</script>
-
-
-<style id="dv-scroll-arrow-fix">
-/* Nút cuộn danh sách: luôn nhìn thấy và bấm được trên các bảng dài */
-.dv-scroll-tools{display:flex;justify-content:flex-end;gap:6px;margin:0 0 6px}
-.dv-scroll-tools button{border:1px solid #cbd9d0;background:#fff;color:#176b49;border-radius:7px;min-width:32px;height:30px;font-weight:800;cursor:pointer}
-.dv-scroll-tools button:focus-visible,.nav-group-toggle:focus-visible,.panel-toggle:focus-visible{outline:3px solid #e2ad35;outline-offset:2px}
-.table-wrap.dv-scroll-ready,.inner-scroll.dv-scroll-ready{position:relative;scroll-behavior:smooth;overscroll-behavior:contain}
-</style>
-<script id="dv-scroll-arrow-fix-js">
-(function(){
-  if(window.__dvScrollArrowFixInstalled)return;
-  window.__dvScrollArrowFixInstalled=true;
-
-  // Dùng sự kiện ủy quyền ở capture phase để nút mũi tên vẫn hoạt động
-  // kể cả khi nội dung được dựng lại theo vai trò Admin/HLV/Phụ huynh.
-  document.addEventListener('click',function(e){
-    const navHead=e.target.closest('#nav .nav-group-toggle');
-    if(navHead){
-      e.preventDefault();e.stopImmediatePropagation();
-      const group=navHead.closest('.nav-group');
-      if(!group)return;
-      const closed=group.classList.toggle('collapsed');
-      navHead.setAttribute('aria-expanded',closed?'false':'true');
-      const arrow=navHead.querySelector('.arrow');
-      if(arrow)arrow.textContent=closed?'▾':'▴';
-      return;
-    }
-    const panelBtn=e.target.closest('.panel-toggle');
-    if(panelBtn){
-      e.preventDefault();e.stopImmediatePropagation();
-      const panel=panelBtn.closest('.panel');
-      if(!panel)return;
-      const closed=panel.classList.toggle('is-collapsed');
-      panelBtn.textContent=closed?'▾':'▴';
-      panelBtn.setAttribute('aria-expanded',closed?'false':'true');
-      panelBtn.setAttribute('aria-label',closed?'Mở rộng nội dung':'Thu gọn nội dung');
-      const key=panel.dataset.collapseKey;
-      if(key){try{localStorage.setItem(key,closed?'1':'0')}catch(_){}}
-    }
-  },true);
-
-  function addScrollTools(root){
-    const selector='.table-wrap, .inner-scroll';
-    const nodes=[];
-    if(root.nodeType===1&&root.matches(selector))nodes.push(root);
-    if(root.querySelectorAll)nodes.push(...root.querySelectorAll(selector));
-    nodes.forEach(box=>{
-      if(box.dataset.dvScrollTools==='1')return;
-      box.dataset.dvScrollTools='1';
-      const parent=box.parentElement;
-      if(!parent)return;
-      const tools=document.createElement('div');
-      tools.className='dv-scroll-tools';
-      tools.setAttribute('aria-label','Điều khiển cuộn danh sách');
-      const vertical=box.classList.contains('inner-scroll');
-      const make=(label,aria,dx,dy)=>{
-        const b=document.createElement('button');b.type='button';b.textContent=label;b.setAttribute('aria-label',aria);b.title=aria;
-        b.addEventListener('click',()=>box.scrollBy({left:dx,top:dy,behavior:'smooth'}));
-        return b;
-      };
-      if(vertical){
-        tools.append(make('↑','Cuộn danh sách lên',0,-Math.max(180,box.clientHeight*.7)),
-                     make('↓','Cuộn danh sách xuống',0,Math.max(180,box.clientHeight*.7)));
-      }else{
-        tools.append(make('←','Cuộn bảng sang trái',-Math.max(220,box.clientWidth*.65),0),
-                     make('→','Cuộn bảng sang phải',Math.max(220,box.clientWidth*.65),0));
-      }
-      parent.insertBefore(tools,box);
-      const update=()=>{
-        const overflow=vertical?box.scrollHeight>box.clientHeight+4:box.scrollWidth>box.clientWidth+4;
-        tools.hidden=!overflow;
-      };
-      update();
-      if('ResizeObserver' in window){const ro=new ResizeObserver(update);ro.observe(box);if(box.firstElementChild)ro.observe(box.firstElementChild);}
-      setTimeout(update,250);
-    });
-  }
-
-  function refresh(root){
-    const section=root.nodeType===1?(root.matches('.section')?root:root.closest('.section')):null;
-    if(section&&typeof window.enhancePanels==='function')window.enhancePanels(section);
-    addScrollTools(root);
-  }
-  function init(){refresh(document);document.querySelectorAll('.section').forEach(refresh);}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
-  const mo=new MutationObserver(records=>records.forEach(r=>r.addedNodes.forEach(n=>{if(n.nodeType===1)refresh(n)})));
-  mo.observe(document.body,{childList:true,subtree:true});
-  window.addEventListener('resize',()=>document.querySelectorAll('.table-wrap,.inner-scroll').forEach(box=>{
-    const t=box.previousElementSibling;if(t?.classList.contains('dv-scroll-tools'))t.hidden=box.scrollWidth<=box.clientWidth+4&&box.scrollHeight<=box.clientHeight+4;
-  }));
-})();
 </script>
 
 </body></html>
