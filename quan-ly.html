@@ -692,7 +692,7 @@ const seed={
 
 let publicFeedNotices=null,publicFeedClasses=null,publicFeedBusy=false;
 let db,role='parent',currentPage='home',modalSaveFn=null,activeCoachName='',activeCoachClassId='',activeCoachClassPin='',editingGradeId=null;
-function load(){try{db=JSON.parse(localStorage.getItem('daoVuKarateDB'))||structuredClone(seed)}catch(e){db=structuredClone(seed)};if(!db.settings)db.settings=structuredClone(seed.settings);if(!db.settings.centerLogo)db.settings.centerLogo=seed.settings.centerLogo;if(!db.settings.clubLogo)db.settings.clubLogo=seed.settings.clubLogo;if(!db.classes)db.classes=[];if(!db.students)db.students=[];if(!Array.isArray(db._deletedStudents))db._deletedStudents=[];if(!db.notices)db.notices=[];if(!Array.isArray(db.registrationRequests))db.registrationRequests=[];if(!db.attendance)db.attendance={};if(!db.payments)db.payments=[];if(!Array.isArray(db.grades))db.grades=[];if(!Array.isArray(db.examSheets))db.examSheets=[];if(!Array.isArray(db.photos))db.photos=[];if(!Array.isArray(db.centerEvents))db.centerEvents=[];if(!Array.isArray(db.achievements))db.achievements=[];if(!Array.isArray(db.libraryImages))db.libraryImages=[];if(!Array.isArray(db.classFund))db.classFund=[];db.students.forEach(s=>{if(!Array.isArray(s.monthlyReviews))s.monthlyReviews=[]});save(false,false)}
+function load(){try{db=JSON.parse(localStorage.getItem('daoVuKarateDB'))||structuredClone(seed)}catch(e){db=structuredClone(seed)};if(!db.settings)db.settings=structuredClone(seed.settings);if(!db.settings.centerLogo)db.settings.centerLogo=seed.settings.centerLogo;if(!db.settings.clubLogo)db.settings.clubLogo=seed.settings.clubLogo;if(!db.classes)db.classes=[];if(!db.students)db.students=[];if(!db.notices)db.notices=[];if(!Array.isArray(db.registrationRequests))db.registrationRequests=[];if(!Array.isArray(db._deletedStudents))db._deletedStudents=[];if(!db.attendance)db.attendance={};if(!db.payments)db.payments=[];if(!Array.isArray(db.grades))db.grades=[];if(!Array.isArray(db.examSheets))db.examSheets=[];if(!Array.isArray(db.photos))db.photos=[];if(!Array.isArray(db.centerEvents))db.centerEvents=[];if(!Array.isArray(db.achievements))db.achievements=[];if(!Array.isArray(db.libraryImages))db.libraryImages=[];if(!Array.isArray(db.classFund))db.classFund=[];db.students.forEach(s=>{if(!Array.isArray(s.monthlyReviews))s.monthlyReviews=[]});save(false,false)}
 function save(show=true,sync=true){localStorage.setItem('daoVuKarateDB',JSON.stringify(db));if(show)toast('Đã lưu trên thiết bị');if(sync){if(!sbSession?.access_token){cloudMsg('CHƯA ĐỒNG BỘ: Học phí mới chỉ lưu trên thiết bị này. Phụ huynh sẽ KHÔNG thấy thay đổi cho đến khi Admin đăng nhập Supabase Auth tại Cài đặt → Đồng bộ đám mây và bấm Đồng bộ ngay.');return}if(cloudConflict){cloudMsg('CẢNH BÁO: Có xung đột dữ liệu. Chưa đồng bộ để tránh mất dữ liệu; hãy xử lý xung đột trước.');return}uploadCloudSnapshot().then(()=>cloudMsg('Đã lưu trên thiết bị và đồng bộ dữ liệu mới lên Supabase. Cổng phụ huynh sẽ đọc bản mới nhất khi tra cứu lại.')).catch(e=>cloudMsg('CẢNH BÁO: Dữ liệu mới chỉ lưu trên thiết bị; đồng bộ Supabase thất bại: '+e.message))}}
 // Supabase cloud sync: manager-authenticated JSON snapshot; localStorage remains as offline fallback.
 const SB_CFG_KEY='daoVuSupabaseConfig', SB_SESSION_KEY='daoVuSupabaseSession';
@@ -747,7 +747,7 @@ function className(id){return db.classes.find(c=>c.id===id)?.name||'Chưa xếp 
 // Mã võ sinh: Dv + chữ cái đầu lớp nhập học + số thứ tự toàn Trung tâm.
 // Số thứ tự được tính trên toàn bộ hồ sơ, kể cả hồ sơ đã nghỉ, nên không tái sử dụng mã cũ.
 function studentClassInitial(classId){const name=String(db.classes.find(c=>String(c.id)===String(classId))?.name||'').trim();if(!name)return '';const normalized=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();const first=(normalized.match(/[A-Z]/)||[])[0]||'';return first;}
-function nextStudentSequence(){let max=Number(db._studentCodeSequenceFloor)||0;for(const s of [...(db.students||[]),...(Array.isArray(db._deletedStudents)?db._deletedStudents:[])] ){const m=String(s.id||s.studentCode||s.student_code||'').match(/^Dv[A-Z](\d+)$/i);if(m)max=Math.max(max,Number(m[1])||0);}for(const code of (Array.isArray(db._retiredStudentCodes)?db._retiredStudentCodes:[])){const m=String(code||'').match(/^Dv[A-Z](\d+)$/i);if(m)max=Math.max(max,Number(m[1])||0);}return max+1;}
+function nextStudentSequence(){let max=Number(db._studentCodeSequenceFloor)||0;for(const s of (db.students||[])){const m=String(s.id||'').match(/^Dv[A-Z](\d+)$/i);if(m)max=Math.max(max,Number(m[1])||0);}for(const code of (Array.isArray(db._retiredStudentCodes)?db._retiredStudentCodes:[])){const m=String(code||'').match(/^Dv[A-Z](\d+)$/i);if(m)max=Math.max(max,Number(m[1])||0);}return max+1;}
 function generateStudentCode(classId){const initial=studentClassInitial(classId);if(!initial)throw Error('Vui lòng chọn lớp trước khi cấp mã võ sinh.');const seq=nextStudentSequence();const code='Dv'+initial+String(seq).padStart(3,'0');if((db.students||[]).some(s=>String(s.id).toLowerCase()===code.toLowerCase()))throw Error('Mã dự kiến đã tồn tại. Hãy đồng bộ dữ liệu Internet rồi thử lại.');return code;}
 function displayStudentCode(student){const base=String(student?.id||'');const initial=studentClassInitial(student?.classId);return base&&initial&&/^Dv[A-Z]\d+$/i.test(base)?base+'-'+initial:base;}
 function activeStudents(){return db.students.filter(s=>s.status==='Đang học')}
@@ -1237,54 +1237,71 @@ function editStudent(id){if(role==='coach'&&id)return toast('HLV chỉ được 
 <label class="btn" style="cursor:pointer">📷 Chụp ảnh<input name="avatarFileCamera" type="file" accept="image/*" capture="environment" onchange="previewStudentAvatar(this)" style="display:none"></label>
 <label class="btn" style="cursor:pointer">🖼️ Chọn từ thư viện<input name="avatarFileGallery" type="file" accept="image/*" onchange="previewStudentAvatar(this)" style="display:none"></label>
 </div><small>Trên điện thoại, chọn “Chụp ảnh” để mở camera sau hoặc “Chọn từ thư viện” để dùng ảnh có sẵn.</small></div>${field('Học phí riêng (VNĐ/tháng)','fee',s.fee||db.settings.tuition,'number','min="0" step="10000"')}${field('Đã thu trong kỳ này (VNĐ)','paid',s.paid||0,'number','min="0" step="10000"')}${field('Tháng cập nhật thể trạng','measurementMonth',new Date().toISOString().slice(0,7),'month')}<div class="field full"><label>Kết quả học tập / nhận xét tiến bộ</label><textarea name="learningResult" placeholder="Ví dụ: tiến bộ tốt về tấn pháp, cần luyện thêm đòn đá...">${esc(s.learningResult||'')}</textarea></div><div class="field full"><label>Ghi chú riêng từ huấn luyện viên</label><textarea name="coachNote" placeholder="Nhận xét về thái độ, chuyên cần, nội dung cần cải thiện...">${esc(s.coachNote||'')}</textarea></div></div>`,()=>{let name=formVal('name').trim();const selectedClassId=role==='coach'?String(activeCoachClassId):(db.classes.some(c=>String(c.id)===String(formVal('classId')))?formVal('classId'):'');let idv=formVal('id').trim();if(isNew&&role==='admin'){try{idv=generateStudentCode(selectedClassId)}catch(e){return toast(e.message)}}if(!name||!idv)return toast('Vui lòng nhập họ tên và chọn lớp võ sinh');if(isNew&&db.students.some(x=>String(x.id).toLowerCase()===idv.toLowerCase()))return toast('Mã võ sinh đã tồn tại');let v={id:idv,name,gender:formVal('gender'),dob:formVal('dob'),birthPlace:formVal('birthPlace').trim(),phone:formVal('phone').trim(),address:formVal('address').trim(),weightClass:formVal('weightClass').trim(),height:Math.max(0,Number(formVal('height'))||0),parent:formVal('parent').trim(),parentPhone:formVal('parentPhone').trim(),parentRelation:formVal('parentRelation').trim(),parentAddress:formVal('parentAddress').trim(),parentOccupation:formVal('parentOccupation').trim(),avatar:s.avatar||'',classId:selectedClassId,belt:formVal('belt'),status:formVal('status'),joined:formVal('joined'),fee:Math.max(0,+formVal('fee')||0),paid:Math.max(0,+formVal('paid')||0),learningResult:formVal('learningResult').trim(),coachNote:formVal('coachNote').trim(),monthlyMeasurements:[...(s.monthlyMeasurements||[])]};const mm=formVal('measurementMonth');if(mm){const record={month:mm,belt:v.belt,weightClass:v.weightClass,height:v.height,updatedAt:today()};const ix=v.monthlyMeasurements.findIndex(x=>x.month===mm);if(ix>=0)v.monthlyMeasurements[ix]=record;else v.monthlyMeasurements.push(record)}const avatarFile=$('#modalBody [name="avatarFileCamera"]')?.files?.[0]||$('#modalBody [name="avatarFileGallery"]')?.files?.[0];if(avatarFile){if(avatarFile.size>12*1024*1024)return toast('Ảnh đại diện tối đa 12MB');imageFileToDataUrl(avatarFile).then(dataUrl=>{v.avatar=dataUrl;commitStudent(v)}).catch(e=>toast('Không đọc được ảnh: '+e.message));return;}commitStudent(v);async function commitStudent(v){if(role==='coach'){if(!isNew)return toast('HLV chỉ được thêm mới võ sinh.');if(!activeCoachClassId||String(v.classId)!==String(activeCoachClassId))return toast('Bạn chỉ được thêm võ sinh vào lớp đang được phân công.');try{await submitCoachStudentToCloud(v)}catch(e){return toast('Chưa thêm được võ sinh lên hệ thống chung: '+e.message)}db.students.push(v);save(false,false);closeModal();renderAll();toast('Đã thêm võ sinh và gửi hồ sơ lên hệ thống chung. Admin sẽ nhận dữ liệu khi đồng bộ.');return;}if(isNew){v.classHistory=[{classId:v.classId||'',date:v.joined||today(),event:'Nhập học'}];db.students.push(v)}else{const oldClassId=s.classId||'',newClassId=v.classId||'';if(String(oldClassId)!==String(newClassId)){if(!Array.isArray(s.classHistory))s.classHistory=[];s.classHistory.push({classId:newClassId,date:today(),event:'Chuyển lớp',fromClassId:oldClassId})}const oldStatus=s.status||'Đang học',newStatus=v.status;if(oldStatus==='Đang học'&&(newStatus==='Tạm nghỉ'||newStatus==='Đã nghỉ')){recordInactiveTuitionMonth(s);s.statusChangedAt=today();}else if((oldStatus==='Tạm nghỉ'||oldStatus==='Đã nghỉ')&&newStatus==='Đang học'){addTuitionWaiverMonths(s,monthKeyFromDate(s.statusChangedAt||today()),currentMonthKey());s.statusChangedAt=today();}Object.assign(s,v);s.attendanceManualStatus=(newStatus!=='Đang học');s.attendanceAutoStatus=false;}save();closeModal();renderAll();toast(isNew?'Đã thêm võ sinh':'Đã cập nhật hồ sơ')}})}
-function deleteStudent(id){
- const index=(db.students||[]).findIndex(x=>String(x.id)===String(id));
- if(index<0)return;
- if(role!=='admin')return toast('Chỉ Admin mới được lưu hồ sơ võ sinh.');
- const s=db.students[index];
- if(!confirm('Chuyển hồ sơ '+(s.name||'võ sinh')+' vào Kho hồ sơ đã xóa? Toàn bộ thông tin, mã số và lịch sử sẽ được giữ lại để Admin tìm và khôi phục.'))return;
- if(!Array.isArray(db._deletedStudents))db._deletedStudents=[];
- const archived={...s,status:'Đã nghỉ',archivedAt:today(),archivedBy:'admin',_archiveState:'deleted'};
- const existing=db._deletedStudents.findIndex(x=>String(x.id)===String(s.id));
- if(existing>=0)db._deletedStudents[existing]=archived;else db._deletedStudents.push(archived);
- db.students.splice(index,1);
- const code=String(s.id||'');
- if(/^Dv[A-Z]\d+$/i.test(code)){
-   if(!Array.isArray(db._retiredStudentCodes))db._retiredStudentCodes=[];
-   if(!db._retiredStudentCodes.some(x=>String(x).toLowerCase()===code.toLowerCase()))db._retiredStudentCodes.push(code);
-   const seq=Number((code.match(/(\d+)$/)||[])[1])||0;
-   db._studentCodeSequenceFloor=Math.max(Number(db._studentCodeSequenceFloor)||0,seq);
+async function deleteStudent(id){
+ if(role!=='admin')return toast('Chỉ Admin mới được xóa/lưu trữ hồ sơ võ sinh.');
+ if(!sbSession?.access_token)return toast('Hãy đăng nhập Supabase Auth bằng Admin trước khi lưu hồ sơ vào kho.');
+ if(cloudBusy||cloudConflict)return toast('Đang đồng bộ hoặc có xung đột dữ liệu. Chưa chuyển hồ sơ vào kho.');
+ const i=(db.students||[]).findIndex(x=>String(x.id)===String(id));if(i<0)return;
+ const s=db.students[i];
+ if(!confirm('Chuyển '+(s.name||'võ sinh')+' · '+s.id+' vào Kho hồ sơ đã xóa? Toàn bộ hồ sơ được giữ trong Supabase để tìm và khôi phục.'))return;
+ const before=JSON.stringify(db);
+ try{
+  const archived={...s,_deletedAt:new Date().toISOString(),_deletedBy:'admin',_archiveVersion:1};
+  if(!Array.isArray(db._deletedStudents))db._deletedStudents=[];
+  db._deletedStudents=db._deletedStudents.filter(x=>String(x.id)!==String(s.id));
+  db._deletedStudents.push(archived);db.students.splice(i,1);
+  if(!Array.isArray(db._retiredStudentCodes))db._retiredStudentCodes=[];
+  if(s.id&&!db._retiredStudentCodes.includes(String(s.id)))db._retiredStudentCodes.push(String(s.id));
+  localStorage.setItem('daoVuKarateDB',JSON.stringify(db));
+  await uploadCloudSnapshot();
+  const verify=await fetchCloudRow();
+  if(!verify?.payload||JSON.stringify(verify.payload)!==JSON.stringify(db))throw Error('Đọc lại Supabase không khớp. Chưa xác nhận đã lưu kho.');
+  rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=verify.updated_at||null;
+  renderAll();toast('Đã lưu hồ sơ đầy đủ vào Kho Supabase.');
+ }catch(e){
+  db=JSON.parse(before);localStorage.setItem('daoVuKarateDB',before);
+  renderAll();toast('Không lưu được hồ sơ vào Supabase: '+e.message);
  }
- save();renderAll();toast('Đã chuyển hồ sơ vào Kho hồ sơ đã xóa. Có thể tìm và khôi phục bằng mã cũ.');
 }
 function openArchivedStudents(){
- if(role!=='admin')return toast('Chỉ Admin được tìm và khôi phục hồ sơ đã xóa.');
- openModal('Kho hồ sơ đã xóa · Tìm và khôi phục',`<div class="notice info">Hồ sơ được lưu riêng trên Supabase, không mất mã số hoặc lịch sử. Tìm bằng mã võ sinh, họ tên, số điện thoại, phụ huynh, ngày sinh hoặc địa chỉ. Khôi phục sẽ đưa hồ sơ trở lại danh sách đang quản lý.</div><div class="field full"><label>Tìm hồ sơ đã xóa / đã nghỉ</label><input id="archivedStudentQuery" placeholder="Nhập mã võ sinh, họ tên, số điện thoại, phụ huynh hoặc địa chỉ..." oninput="renderArchivedStudentSearch()"></div><div class="table-wrap" style="margin-top:12px;max-height:360px;overflow:auto"><table><thead><tr><th>Võ sinh / Mã</th><th>Phụ huynh / Điện thoại</th><th>Ngày sinh / Địa chỉ</th><th>Lớp trước đây</th><th>Thao tác</th></tr></thead><tbody id="archivedStudentResults"><tr><td colspan="5" class="empty">Nhập thông tin để tìm hồ sơ đã lưu.</td></tr></tbody></table></div>`,()=>closeModal());
+ if(role!=='admin')return toast('Chỉ Admin được tìm và khôi phục hồ sơ đã lưu.');
+ openModal('Kho hồ sơ đã nghỉ / đã xóa · Tìm và khôi phục',`<div class="notice info">Kho này lưu hồ sơ đầy đủ trên Supabase. Tìm bằng mã võ sinh, họ tên, số điện thoại, phụ huynh, ngày sinh hoặc địa chỉ. Khôi phục sẽ giữ nguyên mã số cũ.</div><div class="field full"><label>Tìm hồ sơ</label><input id="archivedStudentQuery" placeholder="Nhập mã số, họ tên, điện thoại hoặc thông tin phụ huynh..." oninput="renderArchivedStudentSearch()"></div><div class="table-wrap" style="margin-top:12px;max-height:360px;overflow:auto"><table><thead><tr><th>Võ sinh / Mã</th><th>Phụ huynh / Điện thoại</th><th>Ngày sinh / Địa chỉ</th><th>Lớp trước đây</th><th>Thao tác</th></tr></thead><tbody id="archivedStudentResults"><tr><td colspan="5" class="empty">Nhập thông tin để tìm hồ sơ.</td></tr></tbody></table></div>`,()=>closeModal());
 }
 function renderArchivedStudentSearch(){
  const body=$('#archivedStudentResults');if(!body)return;
  const q=($('#archivedStudentQuery')?.value||'').trim().toLocaleLowerCase('vi');
- if(!q){body.innerHTML='<tr><td colspan="5" class="empty">Nhập thông tin để tìm hồ sơ đã lưu.</td></tr>';return;}
- const archived=[...(Array.isArray(db._deletedStudents)?db._deletedStudents:[]),...(Array.isArray(db.students)?db.students.filter(s=>s.status==='Đã nghỉ'):[])];
- const unique=new Map();archived.forEach(s=>{if(s&&s.id!=null)unique.set(String(s.id),s)});
- const fields=s=>[s.id,s.studentCode,s.student_code,s.code,s.name,s.phone,s.parent,s.parentPhone,s.parentAddress,s.address,s.dob,s.birthPlace,s.gender,s.email,s.note,s.notes].filter(Boolean).join(' ').toLocaleLowerCase('vi');
- const matches=[...unique.values()].filter(s=>fields(s).includes(q));
- body.innerHTML=matches.length?matches.map(s=>`<tr><td><strong>${esc(s.name||'')}</strong><small style="display:block">${esc(s.id||s.studentCode||s.student_code||'')}</small></td><td>${esc(s.parent||'—')}<small style="display:block">${esc(s.parentPhone||s.phone||'')}</small></td><td>${esc(s.dob||'—')}<small style="display:block">${esc(s.address||s.parentAddress||'')}</small></td><td>${esc(className(s.classId))}</td><td><button class="btn small primary" onclick="restoreArchivedStudent('${String(s.id).replace(/'/g,"\\'")}')">Khôi phục</button></td></tr>`).join(''):`<tr><td colspan="5" class="empty">Không tìm thấy hồ sơ đã lưu phù hợp.</td></tr>`;
+ if(!q){body.innerHTML='<tr><td colspan="5" class="empty">Nhập thông tin để tìm hồ sơ.</td></tr>';return}
+ const legacy=(db.students||[]).filter(s=>s.status==='Đã nghỉ').map(s=>({...s,_archiveSource:'legacy'}));
+ const deleted=(Array.isArray(db._deletedStudents)?db._deletedStudents:[]).map(s=>({...s,_archiveSource:'deleted'}));
+ const all=[...deleted,...legacy];
+ const matches=all.filter(s=>[s.id,s.name,s.phone,s.parent,s.parentPhone,s.parentAddress,s.address,s.dob,s.birthPlace].join(' ').toLocaleLowerCase('vi').includes(q));
+ body.innerHTML=matches.length?matches.map(s=>`<tr><td><strong>${esc(s.name||'')}</strong><small style="display:block">${esc(s.id||'')}</small><small style="display:block">${s._archiveSource==='deleted'?'Đã xóa · lưu kho':'Đã nghỉ'}</small></td><td>${esc(s.parent||'—')}<small style="display:block">${esc(s.parentPhone||s.phone||'')}</small></td><td>${esc(s.dob||'—')}<small style="display:block">${esc(s.address||s.parentAddress||'')}</small></td><td>${esc(className(s.classId))}</td><td><button class="btn small primary" onclick="restoreArchivedStudent('${String(s.id).replace(/'/g,"\\'")}')">Khôi phục</button></td></tr>`).join(''):`<tr><td colspan="5" class="empty">Không tìm thấy hồ sơ phù hợp.</td></tr>`;
 }
-function restoreArchivedStudent(id){
+async function restoreArchivedStudent(id){
  if(role!=='admin')return toast('Chỉ Admin được khôi phục hồ sơ.');
- const archivedIndex=(Array.isArray(db._deletedStudents)?db._deletedStudents:[]).findIndex(x=>String(x.id)===String(id));
- const legacyStudent=(db.students||[]).find(x=>String(x.id)===String(id)&&x.status==='Đã nghỉ');
- const s=archivedIndex>=0?db._deletedStudents[archivedIndex]:legacyStudent;
- if(!s)return toast('Không tìm thấy hồ sơ đã lưu. Nếu hồ sơ đã bị xóa vĩnh viễn trước khi có kho lưu trữ, chỉ còn mã số thì không thể phục hồi đầy đủ.');
- if((db.students||[]).some(x=>String(x.id)===String(id)&&x.status!=='Đã nghỉ'))return toast('Mã võ sinh này đang được sử dụng trong danh sách hiện tại.');
- const cls=db.classes||[];
- openModal('Xác nhận khôi phục hồ sơ',`<div class="notice info">Hồ sơ <strong>${esc(s.name||'')}</strong> · mã <strong>${esc(s.id)}</strong> sẽ được đưa trở lại danh sách. Toàn bộ thông tin gốc và lịch sử được giữ nguyên.</div><div class="field full"><label>Lớp hiện tại khi quay lại</label><select name="restoreClass"><option value="">Chưa xếp lớp</option>${cls.map(c=>`<option value="${esc(c.id)}" ${String(c.id)===String(s.classId)?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div><div class="field full"><label>Trạng thái sau khôi phục</label><select name="restoreStatus"><option>Tạm nghỉ</option><option>Đang học</option></select></div><div class="field full"><label>Ngày quay lại</label><input name="returnDate" type="date" value="${today()}"></div>`,()=>{
-   const restored={...s,classId:formVal('restoreClass')||'',status:formVal('restoreStatus')||'Tạm nghỉ',returnedAt:formVal('returnDate')||today(),archivedAt:null,archivedBy:null};
-   if(!Array.isArray(restored.classHistory))restored.classHistory=[];
-   restored.classHistory.push({classId:restored.classId,date:restored.returnedAt,event:'Khôi phục hồ sơ'});
-   if(archivedIndex>=0){db._deletedStudents.splice(archivedIndex,1);db.students.push(restored);}else Object.assign(s,restored);
-   save();closeModal();renderAll();toast('Đã khôi phục hồ sơ với mã cũ '+restored.id);
+ if(!sbSession?.access_token)return toast('Hãy đăng nhập Supabase Auth bằng Admin trước khi khôi phục.');
+ if(cloudBusy||cloudConflict)return toast('Đang đồng bộ hoặc có xung đột dữ liệu. Chưa khôi phục.');
+ const archived=(Array.isArray(db._deletedStudents)?db._deletedStudents:[]).find(x=>String(x.id)===String(id));
+ const legacy=(db.students||[]).find(x=>String(x.id)===String(id)&&x.status==='Đã nghỉ');
+ const s=archived||legacy;if(!s)return toast('Không tìm thấy hồ sơ đã lưu.');
+ if((db.students||[]).some(x=>String(x.id)===String(id)))return toast('Mã này đã tồn tại trong danh sách võ sinh.');
+ const cls=db.classes;
+ openModal('Xác nhận khôi phục hồ sơ',`<div class="notice info">Hồ sơ <strong>${esc(s.name||'')}</strong> · mã <strong>${esc(s.id)}</strong> sẽ được khôi phục với thông tin và lịch sử gốc.</div><div class="field full"><label>Lớp hiện tại khi quay lại</label><select name="restoreClass"><option value="">Chưa xếp lớp</option>${cls.map(c=>`<option value="${esc(c.id)}" ${String(c.id)===String(s.classId)?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div><div class="field full"><label>Trạng thái sau khôi phục</label><select name="restoreStatus"><option>Tạm nghỉ</option><option>Đang học</option></select></div><div class="field full"><label>Ngày quay lại</label><input name="returnDate" type="date" value="${today()}"></div>`,async()=>{
+  const before=JSON.stringify(db);
+  const restored={...s,classId:formVal('restoreClass')||'',status:formVal('restoreStatus')||'Tạm nghỉ',returnedAt:formVal('returnDate')||today(),archivedAt:null,_deletedAt:null,_deletedBy:null};
+  delete restored._archiveSource;delete restored._archiveVersion;
+  if(!Array.isArray(restored.classHistory))restored.classHistory=[];
+  restored.classHistory.push({classId:restored.classId,date:restored.returnedAt,event:'Khôi phục hồ sơ'});
+  db.students.push(restored);
+  db._deletedStudents=(db._deletedStudents||[]).filter(x=>String(x.id)!==String(id));
+  try{
+   localStorage.setItem('daoVuKarateDB',JSON.stringify(db));
+   await uploadCloudSnapshot();
+   const verify=await fetchCloudRow();
+   if(!verify?.payload||JSON.stringify(verify.payload)!==JSON.stringify(db))throw Error('Đọc lại Supabase không khớp. Chưa xác nhận khôi phục.');
+   rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=verify.updated_at||null;
+   closeModal();renderAll();toast('Đã khôi phục hồ sơ trên Supabase với mã cũ '+restored.id);
+  }catch(e){db=JSON.parse(before);localStorage.setItem('daoVuKarateDB',before);renderAll();toast('Không khôi phục được: '+e.message);}
  });
 }
 function editClass(id){let c=db.classes.find(x=>x.id===id)||{id:'L'+String(Date.now()).slice(-4),name:'',coach:'',schedule:'',location:'',fee:db.settings.tuition};let isNew=!db.classes.some(x=>x.id===id);openModal(isNew?'Tạo lớp học':'Cập nhật lớp học',`<div class="form-grid">${field('Mã lớp','id',c.id,'text',isNew?'':'readonly')}${field('Tên lớp *','name',c.name)}${field('Huấn luyện viên','coach',c.coach)}${field('Lịch tập','schedule',c.schedule)}${field('Địa điểm','location',c.location)}${field('Học phí lớp (VNĐ/tháng)','fee',c.fee,'number','min="0" step="10000"')}${field('Mật khẩu riêng của lớp *','classPin',c.classPin||'','password','minlength="4" autocomplete="new-password"')}<div class="field full"><label>🏦 Tài khoản ngân hàng HLV phụ trách lớp</label><div class="form-grid">${field('Ngân hàng','coachBankName',c.coachBankName||'')}${field('Mã ngân hàng VietQR','coachBankCode',c.coachBankCode||'','text','placeholder="Ví dụ: ACB hoặc BIN"')}${field('Số tài khoản HLV','coachBankAccount',c.coachBankAccount||'','text','inputmode="numeric"')}${field('Chủ tài khoản','coachBankAccountName',c.coachBankAccountName||'')}</div><small>Để trống tài khoản HLV nếu lớp dùng QR Admin. Khi đã nhập đủ thông tin, phụ huynh sẽ thấy QR của HLV này; webhook chỉ xác nhận giao dịch vào đúng tài khoản đã gán cho lớp.</small></div><div class="field full"><small>Quản lý võ đường đặt mật khẩu riêng cho lớp này (tối thiểu 4 ký tự). Mỗi lớp phải có mật khẩu riêng, không trùng lớp khác. HLV nhập mật khẩu này khi chọn vai trò Huấn luyện viên và chỉ truy cập được lớp tương ứng.</small></div></div>`,()=>{if(!formVal('name').trim())return toast('Vui lòng nhập tên lớp');if(formVal('classPin').trim().length<4)return toast('Mật khẩu lớp phải có ít nhất 4 ký tự');let v={id:formVal('id').trim(),name:formVal('name').trim(),coach:formVal('coach').trim(),schedule:formVal('schedule').trim(),location:formVal('location').trim(),fee:Math.max(0,+formVal('fee')||0),classPin:formVal('classPin').trim(),coachBankName:formVal('coachBankName').trim(),coachBankCode:formVal('coachBankCode').trim().toUpperCase(),coachBankAccount:formVal('coachBankAccount').replace(/\D/g,''),coachBankAccountName:formVal('coachBankAccountName').trim().toUpperCase()};if(isNew)db.classes.push(v);else Object.assign(c,v);save();closeModal();renderAll()})}
@@ -1613,7 +1630,7 @@ async function purgeAllStudentData(){
  if(role!=='admin')return toast('Chỉ Admin mới được thực hiện thao tác này.');
  if(!sbSession?.access_token||String(sbSession.user?.id||'')==='')return toast('Hãy đăng nhập tài khoản Admin Supabase trước khi xóa.');
  if(cloudBusy||cloudConflict)return toast('Đang đồng bộ hoặc có xung đột dữ liệu. Chưa xóa bất kỳ dữ liệu nào.');
- const ok=confirm('XÓA THEO PHẠM VI ĐÃ DUYỆT?\n\nSẽ xóa: toàn bộ hồ sơ võ sinh và dữ liệu cá nhân/học tập liên kết; khoản thanh toán gắn với các võ sinh đó; TOÀN BỘ quỹ lớp; TOÀN BỘ ảnh thư viện; các yêu cầu đăng ký có trạng thái Từ chối.\n\nGiữ nguyên: 4 lớp và thông tin HLV, lịch lớp, cài đặt, logo, tài khoản, phân quyền, giao dịch không liên quan, yêu cầu đăng ký chưa bị từ chối và mọi dữ liệu chung ngoài phạm vi trên.\n\nHệ thống tải bản sao lưu đầy đủ trước khi ghi lên Supabase, sau đó đọc lại để xác minh. Tiếp tục?');
+ const ok=confirm('XÓA THEO PHẠM VI ĐÃ DUYỆT?\\n\\nSẽ xóa: toàn bộ hồ sơ võ sinh đang hoạt động/đã lưu trữ; toàn bộ mã số thử nghiệm đã cấp và bộ đếm; dữ liệu điểm danh, học phí, điểm thi, ảnh, thành tích, thông báo và đăng ký gắn với võ sinh.\\n\\nGiữ nguyên: lớp học, HLV, lịch lớp, quỹ lớp, thư viện ảnh dùng chung, cài đặt, logo, tài khoản, phân quyền và dữ liệu chung không gắn với võ sinh.\\n\\nHệ thống tải bản sao lưu đầy đủ trước khi ghi lên Supabase, sau đó đọc lại để xác minh. Tiếp tục?');
  if(!ok)return;
  const typed=prompt('Xác nhận lần cuối. Nhập chính xác: XOA DU LIEU DA CHOT');
  if(typed!=='XOA DU LIEU DA CHOT')return toast('Đã hủy. Không có dữ liệu nào bị xóa.');
@@ -1633,13 +1650,11 @@ async function purgeAllStudentData(){
    const linked=o=>!!o&&typeof o==='object'&&['studentId','student_id','studentCode','student_code','maVoSinh','ma_vo_sinh','student'].some(k=>o[k]!=null&&(ids.has(String(o[k]).trim())||codes.has(String(o[k]).trim())));
    const countLinked=a=>(Array.isArray(a)?a:[]).filter(linked).length;
    const rejectedRequest=x=>{const v=String(x?.status||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();return ['tu choi','rejected','declined'].includes(v)};
-   const counts={students:students.length,payments:countLinked(working.payments),attendance:0,grades:countLinked(working.grades),examRows:0,photos:countLinked(working.photos),achievements:countLinked(working.achievements),notices:countLinked(working.notices),centerEvents:countLinked(working.centerEvents),classFund:Array.isArray(working.classFund)?working.classFund.length:0,libraryImages:Array.isArray(working.libraryImages)?working.libraryImages.length:0,registrationRequests:(Array.isArray(working.registrationRequests)?working.registrationRequests:[]).filter(rejectedRequest).length};
-   // Preserve every issued code permanently and keep the global sequence above the highest deleted code.
-   const retired=new Set(Array.isArray(working._retiredStudentCodes)?working._retiredStudentCodes:[]);
-   codes.forEach(c=>retired.add(c));
-   working._retiredStudentCodes=Array.from(retired);
-   const maxDeleted=Array.from(codes).reduce((m,c)=>Math.max(m,Number((c.match(/(\d+)$/)||[])[1])||0),0);
-   working._studentCodeSequenceFloor=Math.max(Number(working._studentCodeSequenceFloor)||0,maxDeleted);
+   const counts={students:students.length,deletedStudents:Array.isArray(working._deletedStudents)?working._deletedStudents.length:0,payments:countLinked(working.payments),attendance:0,grades:countLinked(working.grades),examRows:0,photos:countLinked(working.photos),achievements:countLinked(working.achievements),notices:countLinked(working.notices),centerEvents:countLinked(working.centerEvents),registrationRequests:Array.isArray(working.registrationRequests)?working.registrationRequests.length:0};
+   // RESET ĐỢT DỮ LIỆU: xóa cả mã thử nghiệm và bộ đếm để cấp lại từ 001.
+   working._retiredStudentCodes=[];
+   working._studentCodeSequenceFloor=0;
+   working._deletedStudents=[];
    working.students=[];
    if(working.attendance&&typeof working.attendance==='object')Object.keys(working.attendance).forEach(k=>{const v=working.attendance[k];if(v&&typeof v==='object'&&!Array.isArray(v)){ids.forEach(id=>{if(Object.prototype.hasOwnProperty.call(v,id)){counts.attendance++;delete v[id]}});codes.forEach(code=>{if(Object.prototype.hasOwnProperty.call(v,code)){counts.attendance++;delete v[code]}})}});
    working.grades=(Array.isArray(working.grades)?working.grades:[]).filter(x=>!linked(x));
@@ -1650,9 +1665,7 @@ async function purgeAllStudentData(){
    working.centerEvents=(Array.isArray(working.centerEvents)?working.centerEvents:[]).filter(x=>!linked(x));
    if(Array.isArray(working.reviews))working.reviews=working.reviews.filter(x=>!linked(x));
    working.payments=(Array.isArray(working.payments)?working.payments:[]).filter(x=>!linked(x));
-   working.classFund=[];
-   working.libraryImages=[];
-   working.registrationRequests=(Array.isArray(working.registrationRequests)?working.registrationRequests:[]).filter(x=>!rejectedRequest(x));
+   working.registrationRequests=[];
    // Classes/coaches, settings/logos, accounts, permissions, unrelated payments and non-rejected requests remain untouched.
    const backupName='DAO-VU-SAO-LUU-TRUOC-KHI-XOA-THEO-PHAM-VI-DA-CHOT-'+today()+'.json';
    download(backupName,JSON.stringify(remote.payload,null,2),'application/json');
@@ -1662,7 +1675,7 @@ async function purgeAllStudentData(){
    if(!verify?.payload||JSON.stringify(verify.payload)!==JSON.stringify(db))throw Error('Đã gửi dữ liệu nhưng đọc lại Supabase không khớp. Giữ tệp sao lưu để đối chiếu; chưa xác nhận hoàn tất.');
    rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=verify.updated_at||null;
    pendingRemoteRow=null;cloudConflict=false;renderAll();
-   cloudMsg('Đã hoàn tất và xác minh Supabase. Đã xóa '+counts.students+' hồ sơ võ sinh, '+counts.payments+' khoản thanh toán liên quan, toàn bộ quỹ lớp ('+counts.classFund+'), ảnh thư viện ('+counts.libraryImages+') và '+counts.registrationRequests+' yêu cầu đăng ký bị từ chối. Đã giữ nguyên lớp, HLV, cài đặt, tài khoản, phân quyền và dữ liệu ngoài phạm vi.');
+   cloudMsg('Đã hoàn tất và xác minh Supabase. Đã xóa '+counts.students+' hồ sơ đang hoạt động, '+counts.deletedStudents+' hồ sơ lưu trữ, toàn bộ mã số thử nghiệm và đặt bộ đếm về 001; đã xóa dữ liệu liên quan gồm '+counts.payments+' khoản thanh toán, '+counts.grades+' bản ghi điểm, '+counts.photos+' ảnh, '+counts.achievements+' thành tích và '+counts.registrationRequests+' yêu cầu đăng ký. Đã giữ nguyên lớp, HLV, quỹ lớp, thư viện ảnh dùng chung, cài đặt, tài khoản và phân quyền.');
    toast('Đã xóa theo phạm vi đã duyệt và xác minh đồng bộ thành công.');
  }catch(e){cloudMsg('Không hoàn tất thao tác xóa: '+e.message);toast('Đã dừng thao tác: '+e.message);}
 }
@@ -1896,12 +1909,14 @@ function dvInstallStaffPanel(){
  }
  if(section.parentElement!==target)target.appendChild(section);
 }
-async function dvRefreshStaffPanel(){const host=document.getElementById('dvStaffContent');if(!host)return;try{if(role==='coach'){const [n,th]=await Promise.all([dvApi('coach','coach_notices'),dvApi('coach','coach_threads')]);host.innerHTML=`<div class="form-grid"><div class="field"><label>Loại báo cáo</label><select id="dvReportType"><option value="class_status">Tình hình lớp</option><option value="attendance">Điểm danh</option><option value="student_absence">Học viên vắng</option><option value="incident">Sự việc cần xử lý</option><option value="schedule_change">Thay đổi lịch</option><option value="class_fund">Quỹ lớp</option><option value="equipment">Cơ sở vật chất</option><option value="activity">Hoạt động</option><option value="other">Khác</option></select></div><div class="field"><label>Tiêu đề báo cáo</label><input id="dvReportTitle" placeholder="Nhập tiêu đề" /></div><div class="field full"><label>Nội dung báo cáo gửi Admin</label><textarea id="dvReportBody" rows="3" placeholder="Mô tả tình hình, đề xuất hoặc việc cần hỗ trợ..."></textarea></div></div><button class="btn primary" onclick="dvSendCoachReport()">Gửi báo cáo về Admin</button><h4 style="margin-top:18px">Thông báo từ Admin</h4>${n.notifications.map(x=>`<div class="setting-box"><b>${dvEsc(x.title)}</b><p>${dvEsc(x.body)}</p><small>${new Date(x.created_at).toLocaleString('vi-VN')}</small></div>`).join('')||'<p class="empty">Chưa có thông báo mới.</p>'}<h4 style="margin-top:18px">Trao đổi phụ huynh được phân công</h4>${th.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.status)}</p><button class="btn small" onclick="dvCoachOpenThread('${t.id}')">Mở hội thoại</button><div id="dvCoachThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh được phân công cho lớp.</p>'}`;
- }else if(role==='admin'){const d=await dvApi('admin','admin_inbox');host.innerHTML=`<h4>Gửi thông báo / chỉ đạo</h4><div class="form-grid"><div class="field"><label>Đối tượng</label><select id="dvNoticeTarget"><option value="all_coaches">Tất cả HLV</option><option value="class">HLV một lớp</option><option value="all_parents">Tất cả phụ huynh</option><option value="student">Một phụ huynh / võ sinh</option></select></div><div class="field"><label>Mã lớp (nếu chọn một lớp)</label><input id="dvNoticeClass" placeholder="Mã lớp trên hệ thống" /></div><div class="field"><label>Mã võ sinh (nếu chọn một phụ huynh)</label><input id="dvNoticeStudent" placeholder="Ví dụ DvK001" /></div><div class="field"><label>Tiêu đề</label><input id="dvNoticeTitle" placeholder="Tiêu đề thông báo" /></div><div class="field full"><label>Nội dung</label><textarea id="dvNoticeBody" rows="3" placeholder="Nội dung chỉ đạo / lịch / thông báo..."></textarea></div></div><button class="btn primary" onclick="dvSendAdminNotice()">Gửi thông báo</button><h4 style="margin-top:20px">Báo cáo HLV gửi về</h4>${d.reports.map(x=>`<div class="setting-box"><b>${dvEsc(x.class_name||x.class_id)} · ${dvEsc(x.title)}</b><p>${dvEsc(x.content)}</p><small>${new Date(x.created_at).toLocaleString('vi-VN')} · ${dvEsc(x.status)}</small></div>`).join('')||'<p class="empty">Chưa có báo cáo HLV.</p>'}<h4 style="margin-top:20px">Hội thoại phụ huynh</h4>${d.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.assigned_role==='coach'?'Phân công HLV':'Trung tâm / Admin')} · ${dvEsc(t.status)}</p><button class="btn small" onclick="dvAdminOpenThread('${t.id}')">Mở hội thoại</button><div id="dvAdminThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh.</p>'}`;
+async function dvRefreshStaffPanel(){const host=document.getElementById('dvStaffContent');if(!host)return;try{if(role==='coach'){const [n,th]=await Promise.all([dvApi('coach','coach_notices'),dvApi('coach','coach_threads')]);host.innerHTML=`<div class="form-grid"><div class="field"><label>Loại báo cáo</label><select id="dvReportType"><option value="class_status">Tình hình lớp</option><option value="attendance">Điểm danh</option><option value="student_absence">Học viên vắng</option><option value="incident">Sự việc cần xử lý</option><option value="schedule_change">Thay đổi lịch</option><option value="class_fund">Quỹ lớp</option><option value="equipment">Cơ sở vật chất</option><option value="activity">Hoạt động</option><option value="other">Khác</option></select></div><div class="field"><label>Tiêu đề báo cáo</label><input id="dvReportTitle" placeholder="Nhập tiêu đề" /></div><div class="field full"><label>Nội dung báo cáo gửi Admin</label><textarea id="dvReportBody" rows="3" placeholder="Mô tả tình hình, đề xuất hoặc việc cần hỗ trợ..."></textarea></div><div class="field full"><label>Tệp đính kèm (văn bản, danh sách võ sinh, hình ảnh)</label><input id="dvReportFile" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,image/jpeg,image/png" onchange="dvReportFileChanged()"><small id="dvReportFileInfo" class="muted">Có thể đính kèm tối đa 5 tệp, mỗi tệp không quá 10 MB; tổng dung lượng không quá 25 MB.</small></div></div><button class="btn primary" onclick="dvSendCoachReport()">Gửi báo cáo về Admin</button><h4 style="margin-top:18px">Thông báo từ Admin</h4>${n.notifications.map(x=>`<div class="setting-box"><b>${dvEsc(x.title)}</b><p>${dvEsc(x.body)}</p><small>${new Date(x.created_at).toLocaleString('vi-VN')}</small></div>`).join('')||'<p class="empty">Chưa có thông báo mới.</p>'}<h4 style="margin-top:18px">Trao đổi phụ huynh được phân công</h4>${th.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.status)}</p><button class="btn small" onclick="dvCoachOpenThread('${t.id}')">Mở hội thoại</button><div id="dvCoachThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh được phân công cho lớp.</p>'}`;
+ }else if(role==='admin'){const d=await dvApi('admin','admin_inbox');host.innerHTML=`<h4>Gửi thông báo / chỉ đạo</h4><div class="form-grid"><div class="field"><label>Đối tượng</label><select id="dvNoticeTarget"><option value="all_coaches">Tất cả HLV</option><option value="class">HLV một lớp</option><option value="all_parents">Tất cả phụ huynh</option><option value="student">Một phụ huynh / võ sinh</option></select></div><div class="field"><label>Mã lớp (nếu chọn một lớp)</label><input id="dvNoticeClass" placeholder="Mã lớp trên hệ thống" /></div><div class="field"><label>Mã võ sinh (nếu chọn một phụ huynh)</label><input id="dvNoticeStudent" placeholder="Ví dụ DvK001" /></div><div class="field"><label>Tiêu đề</label><input id="dvNoticeTitle" placeholder="Tiêu đề thông báo" /></div><div class="field full"><label>Nội dung</label><textarea id="dvNoticeBody" rows="3" placeholder="Nội dung chỉ đạo / lịch / thông báo..."></textarea></div></div><button class="btn primary" onclick="dvSendAdminNotice()">Gửi thông báo</button><h4 style="margin-top:20px">Báo cáo HLV gửi về</h4>${d.reports.map(x=>`<div class="setting-box"><b>${dvEsc(x.class_name||x.class_id)} · ${dvEsc(x.title)}</b><p>${dvEsc(x.content)}</p>${(Array.isArray(x.attachments)&&x.attachments.length)?x.attachments.map((a,i)=>a.url?`<p>📎 Tệp ${i+1}: <a href="${dvEsc(a.url)}" target="_blank" rel="noopener">${dvEsc(a.name||'Mở tệp đính kèm')}</a></p>`:`<p>📎 Tệp ${i+1}: ${dvEsc(a.name||'Tệp đính kèm')} <small>(Máy chủ chưa cung cấp đường dẫn tải)</small></p>`).join(''):(x.attachment_url?`<p>📎 <a href="${dvEsc(x.attachment_url)}" target="_blank" rel="noopener">${dvEsc(x.attachment_name||'Mở tệp đính kèm')}</a></p>`:(x.attachment_name?`<p>📎 ${dvEsc(x.attachment_name)} <small>(Máy chủ chưa cung cấp đường dẫn tải)</small></p>`:''))}<small>${new Date(x.created_at).toLocaleString('vi-VN')} · ${dvEsc(x.status)}</small></div>`).join('')||'<p class="empty">Chưa có báo cáo HLV.</p>'}<h4 style="margin-top:20px">Hội thoại phụ huynh</h4>${d.threads.map(t=>`<div class="setting-box"><b>${dvEsc(t.student_name||t.student_code)} · ${dvEsc(t.parent_name)}</b><p>${dvEsc(t.assigned_role==='coach'?'Phân công HLV':'Trung tâm / Admin')} · ${dvEsc(t.status)}</p><button class="btn small" onclick="dvAdminOpenThread('${t.id}')">Mở hội thoại</button><div id="dvAdminThread-${t.id}"></div></div>`).join('')||'<p class="empty">Chưa có hội thoại phụ huynh.</p>'}`;
  }}catch(e){host.innerHTML='<div class="notice danger">Không tải được hộp thư: '+dvEsc(e.message)+'</div>';}}
 async function dvCoachOpenThread(id){try{const d=await dvApi('coach','thread_messages',{thread_id:id});const h=document.getElementById('dvCoachThread-'+id);h.innerHTML=d.messages.map(m=>`<p><b>${dvEsc(m.sender_role)}:</b> ${dvEsc(m.message)}</p>`).join('')+`<textarea id="dvCoachReply-${id}" rows="2" placeholder="Trả lời phụ huynh"></textarea><button class="btn small primary" onclick="dvCoachReply('${id}')">Gửi phản hồi</button>`}catch(e){toast(e.message)}}
 async function dvCoachReply(id){try{await dvApi('coach','reply_thread',{thread_id:id,message:document.getElementById('dvCoachReply-'+id).value});await dvCoachOpenThread(id);toast('Đã gửi phản hồi.')}catch(e){toast(e.message)}}
-async function dvSendCoachReport(){try{await dvApi('coach','coach_report',{report_type:document.getElementById('dvReportType').value,title:document.getElementById('dvReportTitle').value,content:document.getElementById('dvReportBody').value});document.getElementById('dvReportTitle').value='';document.getElementById('dvReportBody').value='';toast('Đã gửi báo cáo về Admin.');dvRefreshStaffPanel()}catch(e){toast('Không gửi được báo cáo: '+e.message)}}
+function dvReportFileChanged(){const input=document.getElementById('dvReportFile'),info=document.getElementById('dvReportFileInfo'),files=[...(input?.files||[])];if(!info)return;if(!files.length){info.textContent='Có thể đính kèm tối đa 5 tệp, mỗi tệp không quá 10 MB; tổng dung lượng không quá 25 MB.';return}const total=files.reduce((n,f)=>n+f.size,0);if(files.length>5){input.value='';info.textContent='Chỉ được chọn tối đa 5 tệp.';toast('Mỗi báo cáo chỉ được đính kèm tối đa 5 tệp.');return}if(files.some(f=>f.size>10*1024*1024)){input.value='';info.textContent='Có tệp vượt quá 10 MB.';toast('Mỗi tệp đính kèm tối đa 10 MB.');return}if(total>25*1024*1024){input.value='';info.textContent='Tổng dung lượng vượt quá 25 MB.';toast('Tổng dung lượng các tệp tối đa 25 MB.');return}info.textContent='Đã chọn '+files.length+'/5 tệp · '+(total/1024/1024).toFixed(2)+' MB: '+files.map(f=>f.name).join('; ')}
+async function dvReadReportAttachment(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>{const value=String(r.result||'');resolve({name:file.name,mime_type:file.type||'application/octet-stream',size:file.size,base64:value.includes(',')?value.split(',')[1]:value})};r.onerror=()=>reject(Error('Không đọc được tệp '+file.name));r.readAsDataURL(file)})}
+async function dvSendCoachReport(){try{const input=document.getElementById('dvReportFile'),files=[...(input?.files||[])];const total=files.reduce((n,f)=>n+f.size,0);if(files.length>5)throw Error('Mỗi báo cáo chỉ được đính kèm tối đa 5 tệp.');if(files.some(f=>f.size>10*1024*1024))throw Error('Mỗi tệp đính kèm tối đa 10 MB.');if(total>25*1024*1024)throw Error('Tổng dung lượng các tệp tối đa 25 MB.');const payload={report_type:document.getElementById('dvReportType').value,title:document.getElementById('dvReportTitle').value,content:document.getElementById('dvReportBody').value};if(files.length)payload.attachments=await Promise.all(files.map(dvReadReportAttachment));await dvApi('coach','coach_report',payload);document.getElementById('dvReportTitle').value='';document.getElementById('dvReportBody').value='';if(input)input.value='';const info=document.getElementById('dvReportFileInfo');if(info)info.textContent='Có thể đính kèm tối đa 5 tệp, mỗi tệp không quá 10 MB; tổng dung lượng không quá 25 MB.';toast('Đã gửi báo cáo về Admin.');dvRefreshStaffPanel()}catch(e){toast('Không gửi được báo cáo: '+e.message)}}
 async function dvSendAdminNotice(){try{await dvApi('admin','admin_notice',{target:document.getElementById('dvNoticeTarget').value,class_id:document.getElementById('dvNoticeClass').value,student_code:document.getElementById('dvNoticeStudent').value,title:document.getElementById('dvNoticeTitle').value,body:document.getElementById('dvNoticeBody').value});toast('Đã gửi thông báo.');dvRefreshStaffPanel()}catch(e){toast('Không gửi được: '+e.message)}}
 async function dvAdminOpenThread(id){try{const d=await dvApi('admin','thread_messages',{thread_id:id});const h=document.getElementById('dvAdminThread-'+id);h.innerHTML=d.messages.map(m=>`<p><b>${dvEsc(m.sender_role)}:</b> ${dvEsc(m.message)}</p>`).join('')+`<textarea id="dvAdminReply-${id}" rows="2" placeholder="Trả lời phụ huynh"></textarea><button class="btn small primary" onclick="dvAdminReply('${id}')">Gửi phản hồi</button>`}catch(e){toast(e.message)}}
 async function dvAdminReply(id){try{await dvApi('admin','reply_thread',{thread_id:id,message:document.getElementById('dvAdminReply-'+id).value});await dvAdminOpenThread(id);toast('Đã gửi phản hồi.')}catch(e){toast(e.message)}}
@@ -1923,6 +1938,99 @@ applyRole=function(){_dvOriginalApplyRoleForAssessmentMenu();syncAssessmentAdmin
 const _dvOriginalRenderAll=renderAll;
 renderAll=function(){_dvOriginalRenderAll();syncAssessmentAdminMenu()};
 syncAssessmentAdminMenu();
+</script>
+
+
+<style id="dv-scroll-arrow-fix">
+/* Nút cuộn danh sách: luôn nhìn thấy và bấm được trên các bảng dài */
+.dv-scroll-tools{display:flex;justify-content:flex-end;gap:6px;margin:0 0 6px}
+.dv-scroll-tools button{border:1px solid #cbd9d0;background:#fff;color:#176b49;border-radius:7px;min-width:32px;height:30px;font-weight:800;cursor:pointer}
+.dv-scroll-tools button:focus-visible,.nav-group-toggle:focus-visible,.panel-toggle:focus-visible{outline:3px solid #e2ad35;outline-offset:2px}
+.table-wrap.dv-scroll-ready,.inner-scroll.dv-scroll-ready{position:relative;scroll-behavior:smooth;overscroll-behavior:contain}
+</style>
+<script id="dv-scroll-arrow-fix-js">
+(function(){
+  if(window.__dvScrollArrowFixInstalled)return;
+  window.__dvScrollArrowFixInstalled=true;
+
+  // Dùng sự kiện ủy quyền ở capture phase để nút mũi tên vẫn hoạt động
+  // kể cả khi nội dung được dựng lại theo vai trò Admin/HLV/Phụ huynh.
+  document.addEventListener('click',function(e){
+    const navHead=e.target.closest('#nav .nav-group-toggle');
+    if(navHead){
+      e.preventDefault();e.stopImmediatePropagation();
+      const group=navHead.closest('.nav-group');
+      if(!group)return;
+      const closed=group.classList.toggle('collapsed');
+      navHead.setAttribute('aria-expanded',closed?'false':'true');
+      const arrow=navHead.querySelector('.arrow');
+      if(arrow)arrow.textContent=closed?'▾':'▴';
+      return;
+    }
+    const panelBtn=e.target.closest('.panel-toggle');
+    if(panelBtn){
+      e.preventDefault();e.stopImmediatePropagation();
+      const panel=panelBtn.closest('.panel');
+      if(!panel)return;
+      const closed=panel.classList.toggle('is-collapsed');
+      panelBtn.textContent=closed?'▾':'▴';
+      panelBtn.setAttribute('aria-expanded',closed?'false':'true');
+      panelBtn.setAttribute('aria-label',closed?'Mở rộng nội dung':'Thu gọn nội dung');
+      const key=panel.dataset.collapseKey;
+      if(key){try{localStorage.setItem(key,closed?'1':'0')}catch(_){}}
+    }
+  },true);
+
+  function addScrollTools(root){
+    const selector='.table-wrap, .inner-scroll';
+    const nodes=[];
+    if(root.nodeType===1&&root.matches(selector))nodes.push(root);
+    if(root.querySelectorAll)nodes.push(...root.querySelectorAll(selector));
+    nodes.forEach(box=>{
+      if(box.dataset.dvScrollTools==='1')return;
+      box.dataset.dvScrollTools='1';
+      const parent=box.parentElement;
+      if(!parent)return;
+      const tools=document.createElement('div');
+      tools.className='dv-scroll-tools';
+      tools.setAttribute('aria-label','Điều khiển cuộn danh sách');
+      const vertical=box.classList.contains('inner-scroll');
+      const make=(label,aria,dx,dy)=>{
+        const b=document.createElement('button');b.type='button';b.textContent=label;b.setAttribute('aria-label',aria);b.title=aria;
+        b.addEventListener('click',()=>box.scrollBy({left:dx,top:dy,behavior:'smooth'}));
+        return b;
+      };
+      if(vertical){
+        tools.append(make('↑','Cuộn danh sách lên',0,-Math.max(180,box.clientHeight*.7)),
+                     make('↓','Cuộn danh sách xuống',0,Math.max(180,box.clientHeight*.7)));
+      }else{
+        tools.append(make('←','Cuộn bảng sang trái',-Math.max(220,box.clientWidth*.65),0),
+                     make('→','Cuộn bảng sang phải',Math.max(220,box.clientWidth*.65),0));
+      }
+      parent.insertBefore(tools,box);
+      const update=()=>{
+        const overflow=vertical?box.scrollHeight>box.clientHeight+4:box.scrollWidth>box.clientWidth+4;
+        tools.hidden=!overflow;
+      };
+      update();
+      if('ResizeObserver' in window){const ro=new ResizeObserver(update);ro.observe(box);if(box.firstElementChild)ro.observe(box.firstElementChild);}
+      setTimeout(update,250);
+    });
+  }
+
+  function refresh(root){
+    const section=root.nodeType===1?(root.matches('.section')?root:root.closest('.section')):null;
+    if(section&&typeof window.enhancePanels==='function')window.enhancePanels(section);
+    addScrollTools(root);
+  }
+  function init(){refresh(document);document.querySelectorAll('.section').forEach(refresh);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+  const mo=new MutationObserver(records=>records.forEach(r=>r.addedNodes.forEach(n=>{if(n.nodeType===1)refresh(n)})));
+  mo.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('resize',()=>document.querySelectorAll('.table-wrap,.inner-scroll').forEach(box=>{
+    const t=box.previousElementSibling;if(t?.classList.contains('dv-scroll-tools'))t.hidden=box.scrollWidth<=box.clientWidth+4&&box.scrollHeight<=box.clientHeight+4;
+  }));
+})();
 </script>
 
 </body></html>
