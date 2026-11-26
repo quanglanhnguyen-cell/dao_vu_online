@@ -1259,32 +1259,43 @@ async function getArticleSession(){
   articleSession=data?.session||null;
   return articleSession;
 }
-async function loadArticlesFromCloud(){
-  if(!supabaseClient) return;
-  const {data,error}=await supabaseClient.from(ARTICLE_TABLE)
-    .select("id,course,title,html,created_at,sort_order")
-    .order("sort_order",{ascending:true})
-    .order("created_at",{ascending:true});
-  if(error){
-    console.warn("Chưa tải được bài viết từ Supabase:",error.message);
-    return;
-  }
-  const cloud={};
-  courseKeys.forEach(k=>cloud[k]=[]);
-  (data||[]).forEach(row=>{
-    if(cloud[row.course]) cloud[row.course].push({
-      id:row.id,title:row.title,html:row.html||""
+let websiteCloudLoadBusy=false;
+async function loadArticlesFromCloud(options={}){
+  if(!supabaseClient||websiteCloudLoadBusy) return;
+  websiteCloudLoadBusy=true;
+  try{
+    const {data:rows,error}=await supabaseClient.from(ARTICLE_TABLE)
+      .select("id,course,title,html,created_at,sort_order")
+      .order("sort_order",{ascending:true})
+      .order("created_at",{ascending:true});
+    if(error) throw error;
+    const cloud={};
+    courseKeys.forEach(k=>cloud[k]=[]);
+    let remoteConfig=null;
+    (rows||[]).forEach(row=>{
+      if(row.id==="site-config-v1"&&row.course==="__site_config__"){
+        try{remoteConfig=JSON.parse(row.html||"{}")}catch(e){console.warn("Cấu hình website trên máy chủ không đọc được:",e)}
+      }else if(cloud[row.course]) cloud[row.course].push({id:row.id,title:row.title,html:row.html||""});
     });
-  });
-  data.courseArticles=cloud;
-  articlesCloudReady=true;
-  render();
-  if(document.getElementById("editor")?.classList.contains("open")) renderArticleAdminList();
+    const editorOpen=!!document.getElementById("editor")?.classList.contains("open");
+    if(remoteConfig&&!editorOpen&&!options.keepLocalEdits){
+      const currentArticles=cloud;
+      data={...data,...remoteConfig,courseArticles:currentArticles};
+      try{localStorage.setItem("daovuDemoInfo",JSON.stringify(data))}catch(e){console.warn("Không lưu được cache website:",e)}
+    }else{
+      data.courseArticles=cloud;
+      if(!editorOpen)try{localStorage.setItem("daovuDemoInfo",JSON.stringify(data))}catch(e){}
+    }
+    articlesCloudReady=true;
+    render();
+    if(editorOpen) renderArticleAdminList();
+  }catch(error){console.warn("Chưa tải được dữ liệu website từ Supabase:",error.message||error)}
+  finally{websiteCloudLoadBusy=false}
 }
 async function seedIntroArticlesIfEmpty(){
-  const {data:existing,error}=await supabaseClient.from(ARTICLE_TABLE).select("id").limit(1);
+  const {data:existing,error}=await supabaseClient.from(ARTICLE_TABLE).select("id,course").limit(100);
   if(error) throw error;
-  if(existing?.length) return;
+  if(existing?.some(row=>courseKeys.includes(row.course))) return;
   const rows=[];
   courseKeys.forEach((course,index)=>{
     (originalCourseArticles?.[course]||[]).forEach((a,i)=>{
@@ -1478,7 +1489,24 @@ function renderArticleAdminList(){
 
 async function openEditor(){if(!await requireArticleAdmin())return;["Name","Slogan","Address","Phone","Email","Hours","Social","Map","Karate","Football","Swimming","Finger","Balance","About"].forEach(k=>document.getElementById("f"+k).value=data[k.toLowerCase()]||"");const preview=document.getElementById("heroPreview");preview.src=data.heroImage||"";preview.style.display=data.heroImage?"block":"none";document.getElementById("fHeroPosition").value=data.heroPosition??50;document.getElementById("fHeroBrightness").value=data.heroBrightness??100;document.getElementById("posLabel").textContent=(data.heroPosition??50)+"%";document.getElementById("brightLabel").textContent=(data.heroBrightness??100)+"%";const lp=document.getElementById("logoPreview");lp.src=data.logoImage||"";lp.style.display=data.logoImage?"block":"none";renderArticleAdminList();document.getElementById("editor").classList.add("open")}
 function closeEditor(){document.getElementById("editor").classList.remove("open")}
-function saveDemo(){["Name","Slogan","Address","Phone","Email","Hours","Social","Map","Karate","Football","Swimming","Finger","Balance","About"].forEach(k=>data[k.toLowerCase()]=document.getElementById("f"+k).value.trim());data.heroImages=(Array.isArray(data.heroImages)?data.heroImages:[]).filter(Boolean).slice(0,3);data.heroImage=data.heroImages[0]||"";data.slideIndex=Math.min(Number(data.slideIndex)||0,Math.max(0,data.heroImages.length-1));data.heroPosition=Number(document.getElementById("fHeroPosition").value);data.heroBrightness=Number(document.getElementById("fHeroBrightness").value);if(!data.name)data.name=defaults.name;if(!data.slogan)data.slogan=defaults.slogan;if(!data.about)data.about=defaults.about;try{localStorage.setItem("daovuDemoInfo",JSON.stringify(data));}catch(err){alert("Trình duyệt không cho phép lưu dữ liệu. Bạn vẫn có thể xem bản xem trước trong phiên này.");}render();closeEditor();alert("Đã lưu thông tin xem thử trên trình duyệt này.")}
+async function saveDemo(){
+  if(!await requireArticleAdmin())return;
+  ["Name","Slogan","Address","Phone","Email","Hours","Social","Map","Karate","Football","Swimming","Finger","Balance","About"].forEach(k=>data[k.toLowerCase()]=document.getElementById("f"+k).value.trim());
+  data.heroImages=(Array.isArray(data.heroImages)?data.heroImages:[]).filter(Boolean).slice(0,3);
+  data.heroImage=data.heroImages[0]||"";
+  data.slideIndex=Math.min(Number(data.slideIndex)||0,Math.max(0,data.heroImages.length-1));
+  data.heroPosition=Number(document.getElementById("fHeroPosition").value);
+  data.heroBrightness=Number(document.getElementById("fHeroBrightness").value);
+  if(!data.name)data.name=defaults.name;if(!data.slogan)data.slogan=defaults.slogan;if(!data.about)data.about=defaults.about;
+  const config={};
+  ["name","slogan","address","phone","email","hours","social","map","karate","football","swimming","finger","balance","about","heroImages","heroImage","slideIndex","heroPosition","heroBrightness","logoImage","programImages","activityImages"].forEach(k=>{if(data[k]!==undefined)config[k]=data[k]});
+  try{
+    const {error}=await supabaseClient.from(ARTICLE_TABLE).upsert({id:"site-config-v1",course:"__site_config__",title:"Cấu hình website Đạo Vũ",html:JSON.stringify(config),sort_order:-1000},{onConflict:"id"});
+    if(error)throw error;
+    try{localStorage.setItem("daovuDemoInfo",JSON.stringify(data))}catch(err){console.warn("Không lưu được cache trên thiết bị:",err)}
+    render();closeEditor();alert("Đã lưu cấu hình website lên máy chủ. Các thiết bị khác sẽ tự nhận bản cập nhật khi tải lại hoặc sau chu kỳ đồng bộ.");
+  }catch(err){alert("Chưa lưu được cấu hình lên máy chủ: "+(err.message||err)+". Nội dung vẫn còn trên màn hình này; vui lòng thử lại.")}
+}
 function resetDemo(){data={...defaults,programImages:{},activityImages:[]};try{localStorage.removeItem("daovuDemoInfo");}catch(err){}render();openEditor()}
 function readCompressedImage(file,done){if(!file)return;const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{const scale=Math.min(1,1800/img.width,1200/img.height),c=document.createElement("canvas");c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext("2d").drawImage(img,0,0,c.width,c.height);done(c.toDataURL("image/jpeg",0.78));};img.src=reader.result;};reader.readAsDataURL(file);}
 ["fHeroImage2","fHeroImage3"].forEach((id,i)=>document.getElementById(id).addEventListener("change",e=>readCompressedImage(e.target.files[0],src=>{data.heroImages=data.heroImages||[];data.heroImages[i+1]=src;render();})));
@@ -1501,6 +1529,11 @@ daoVuStartHeroAuto();
 
 render();
 getArticleSession().then(()=>loadArticlesFromCloud());
+let daoVuWebsiteRefreshBusy=false;
+async function daoVuRefreshWebsiteCloud(){if(daoVuWebsiteRefreshBusy||document.hidden)return;daoVuWebsiteRefreshBusy=true;try{await loadArticlesFromCloud()}finally{daoVuWebsiteRefreshBusy=false}}
+setInterval(daoVuRefreshWebsiteCloud,15000);
+window.addEventListener("focus",daoVuRefreshWebsiteCloud);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)daoVuRefreshWebsiteCloud()});
 </script>
 <script id="dao-vu-parent-lookup-script">
 const DAO_VU_PARENT_SUPABASE={url:'https://jndvtnpxepuwqutkkzin.supabase.co',key:'sb_publishable_rmBZOP_LspTasvW1t7LQhQ_seppbkWW'};
