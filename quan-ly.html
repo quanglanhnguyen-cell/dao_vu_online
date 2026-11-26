@@ -699,7 +699,7 @@ const SB_CFG_KEY='daoVuSupabaseConfig', SB_SESSION_KEY='daoVuSupabaseSession';
 let sbConfig={url:'https://jndvtnpxepuwqutkkzin.supabase.co',key:'sb_publishable_rmBZOP_LspTasvW1t7LQhQ_seppbkWW'},sbSession=null,cloudBusy=false,cloudWriteQueue=Promise.resolve();
 const SB_LAST_SYNC_KEY='daoVuLastSyncedSnapshotHash',SB_LEGACY_LAST_SYNC_KEY='daoVuLastSyncedSnapshot';
 function cloudSnapshotHash(value){const s=String(value??'');let h1=0x811c9dc5,h2=0x9e3779b9;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);h1=Math.imul(h1^c,0x01000193);h2=Math.imul(h2^c,0x85ebca6b)}return s.length.toString(36)+'-'+(h1>>>0).toString(36)+'-'+(h2>>>0).toString(36)}
-let lastCloudSnapshotJson=null,lastCloudSnapshotHash=localStorage.getItem(SB_LAST_SYNC_KEY)||null,lastCloudUpdatedAt=null,cloudConflict=false,remotePollBusy=false,remotePollTimer=null,pendingRemoteRow=null;
+let lastCloudSnapshotJson=null,lastCloudSnapshotHash=localStorage.getItem(SB_LAST_SYNC_KEY)||null,lastCloudUpdatedAt=null,cloudConflict=false,remotePollBusy=false,remotePollTimer=null,pendingRemoteRow=null,cloudSyncListenersInstalled=false;
 function rememberCloudSnapshot(value){lastCloudSnapshotJson=String(value);lastCloudSnapshotHash=cloudSnapshotHash(value);try{localStorage.setItem(SB_LAST_SYNC_KEY,lastCloudSnapshotHash);localStorage.removeItem(SB_LEGACY_LAST_SYNC_KEY)}catch(e){console.warn('Không lưu được dấu kiểm tra đồng bộ:',e)}}
 try{const legacy=localStorage.getItem(SB_LEGACY_LAST_SYNC_KEY);if(legacy){lastCloudSnapshotHash=cloudSnapshotHash(legacy);localStorage.removeItem(SB_LEGACY_LAST_SYNC_KEY);localStorage.setItem(SB_LAST_SYNC_KEY,lastCloudSnapshotHash)}}catch(e){try{localStorage.removeItem(SB_LEGACY_LAST_SYNC_KEY);if(lastCloudSnapshotHash)localStorage.setItem(SB_LAST_SYNC_KEY,lastCloudSnapshotHash)}catch(_){}}
 try{sbConfig=JSON.parse(localStorage.getItem(SB_CFG_KEY))||sbConfig;sbSession=JSON.parse(sessionStorage.getItem(SB_SESSION_KEY)||'null')}catch(e){}
@@ -709,7 +709,20 @@ function saveSupabaseConfig(){const url=normalizeSbUrl($('#sbUrl').value),key=$(
 let sbRefreshPromise=null;async function refreshSupabaseSession(){if(!sbSession?.refresh_token)throw Error('Phiên đăng nhập đã hết hạn và không có refresh token. Hãy đăng xuất rồi đăng nhập lại.');if(sbRefreshPromise)return sbRefreshPromise;sbRefreshPromise=(async()=>{const r=await fetch(sbConfig.url+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:sbConfig.key,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:sbSession.refresh_token})});const tx=await r.text();let d=null;try{d=tx?JSON.parse(tx):null}catch{}if(!r.ok)throw Error((d?.msg||d?.message||d?.error_description||tx||'Không làm mới được phiên Supabase')+' (HTTP '+r.status+')');if(!d?.access_token||!d?.refresh_token)throw Error('Supabase không trả về phiên làm mới hợp lệ.');sbSession={...sbSession,...d,user:d.user||sbSession.user};sessionStorage.setItem(SB_SESSION_KEY,JSON.stringify(sbSession));cloudMsg('Đã tự động làm mới phiên đăng nhập Supabase.');return sbSession})().finally(()=>{sbRefreshPromise=null});return sbRefreshPromise}
 async function sbFetch(path,opts={}){if(!sbConfig.url||!sbConfig.key)throw Error('Vui lòng nhập URL và publishable key, sau đó bấm Lưu cấu hình.');const send=async()=>{const headers={apikey:sbConfig.key,'Content-Type':'application/json',...(opts.headers||{})};headers.Authorization=sbSession?.access_token?'Bearer '+sbSession.access_token:'Bearer '+sbConfig.key;let r;try{r=await fetch(sbConfig.url+path,{...opts,headers})}catch(e){throw Error('Không kết nối được Supabase. Kiểm tra Project URL, mạng Internet và API của dự án. Chi tiết: '+(e.message||'Failed to fetch'))}return r};let r=await send();if(r.status===401&&sbSession?.refresh_token){await refreshSupabaseSession();r=await send()}const tx=await r.text();let data=null;try{data=tx?JSON.parse(tx):null}catch{}if(!r.ok)throw Error((data?.message||data?.msg||data?.hint||tx||'HTTP '+r.status)+' (HTTP '+r.status+')');return data}
 async function fetchCloudRow(){if(!sbSession?.access_token)return null;const userId=sbSession.user.id;const rows=await sbFetch('/rest/v1/app_state?user_id=eq.'+encodeURIComponent(userId)+'&select=payload,updated_at&limit=1');return rows?.[0]||null}
-function startCloudAutoSync(){if(remotePollTimer)clearInterval(remotePollTimer);if(!sbSession?.access_token)return;remotePollTimer=setInterval(()=>{pollCloudForChanges();if(role==='admin')refreshPublicRegistrations();},12000);window.addEventListener('focus',()=>{pollCloudForChanges();if(role==='admin')refreshPublicRegistrations()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){pollCloudForChanges();if(role==='admin')refreshPublicRegistrations()}});}
+function startCloudAutoSync(){
+ if(remotePollTimer)clearInterval(remotePollTimer);
+ if(!sbSession?.access_token)return;
+ // Chỉ gắn listener một lần; tránh mỗi lần đăng nhập/khôi phục phiên lại tạo thêm listener.
+ if(!cloudSyncListenersInstalled){
+  const wakeCloudSync=()=>{if(!document.hidden&&sbSession?.access_token){pollCloudForChanges();if(role==='admin')refreshPublicRegistrations();}};
+  window.addEventListener('focus',wakeCloudSync);
+  document.addEventListener('visibilitychange',wakeCloudSync);
+  cloudSyncListenersInstalled=true;
+ }
+ // Kiểm tra ngay khi bật, sau đó tiếp tục kiểm tra định kỳ kể cả khi app_state chưa có bản ghi.
+ pollCloudForChanges();
+ remotePollTimer=setInterval(()=>{pollCloudForChanges();if(role==='admin')refreshPublicRegistrations();},12000);
+}
 function paymentSyncIdentity(p){const id=String(p?.id??'').trim();if(id)return 'id:'+id;const tx=String(p?.gatewayTransactionId??p?.gateway_transaction_id??p?.sepayTransactionId??'').trim();const month=String(p?.month??p?.billingMonth??p?.billing_month??String(p?.date??'').slice(0,7)).slice(0,7);return tx?'tx:'+tx+':'+month:null}
 function mergePaymentRows(baseRows,remoteRows){const out=Array.isArray(baseRows)?baseRows.slice():[],seen=new Set(out.map(paymentSyncIdentity).filter(Boolean));for(const p of (Array.isArray(remoteRows)?remoteRows:[])){const key=paymentSyncIdentity(p);if(key&&seen.has(key))continue;out.push(p);if(key)seen.add(key)}return out}
 function mergeRemotePaymentsWithoutOverwritingLocal(remotePayload,updatedAt){
@@ -725,8 +738,8 @@ function mergeRemotePaymentsWithoutOverwritingLocal(remotePayload,updatedAt){
  renderAll();
 }
 async function pollCloudForChanges(){if(!sbSession?.access_token||remotePollBusy||cloudBusy||document.hidden)return;remotePollBusy=true;try{const row=await fetchCloudRow();if(!row?.payload||!row.updated_at)return;const remoteTime=Date.parse(row.updated_at),knownTime=Date.parse(lastCloudUpdatedAt||'1970-01-01T00:00:00Z');if(!Number.isFinite(remoteTime)||remoteTime<=knownTime)return;const localJson=JSON.stringify(db);if(lastCloudSnapshotHash!==null&&cloudSnapshotHash(localJson)!==lastCloudSnapshotHash){mergeRemotePaymentsWithoutOverwritingLocal(row.payload,row.updated_at);return}db=row.payload;localStorage.setItem('daoVuKarateDB',JSON.stringify(db));rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=row.updated_at;pendingRemoteRow=null;cloudConflict=false;renderAll();cloudMsg('Đã tự động nhận dữ liệu mới nhất từ thiết bị khác.')}catch(e){cloudMsg('Chưa kiểm tra được dữ liệu mới: '+e.message)}finally{remotePollBusy=false}}
-async function supabaseSignIn(){try{if(!saveSupabaseConfig())return;const email=$('#sbEmail').value.trim(),password=$('#sbPassword').value;if(!email||!password)return cloudMsg('Nhập email và mật khẩu tài khoản Supabase Auth.');cloudMsg('Đang đăng nhập…');const r=await fetch(sbConfig.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:sbConfig.key,'Content-Type':'application/json'},body:JSON.stringify({email,password})});const d=await r.json();if(!r.ok)throw Error(d.msg||d.message||'Đăng nhập thất bại');sbSession=d;sessionStorage.setItem(SB_SESSION_KEY,JSON.stringify(d));if(!d.user?.id||!d.access_token)throw Error('Supabase không trả về phiên đăng nhập hợp lệ.');const prof=await sbFetch('/rest/v1/profiles?user_id=eq.'+encodeURIComponent(d.user.id)+'&select=user_id,role,type');if(!prof?.length||String(prof[0].role||'').toLowerCase()!=='admin'||String(prof[0].type||'').toLowerCase()!=='admin')throw Error('Tài khoản chưa được cấp quyền quản trị trong profiles (cần role=admin và type=admin).');const row=await fetchCloudRow();if(row?.payload){db=row.payload;localStorage.setItem('daoVuKarateDB',JSON.stringify(db));rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=row.updated_at||null;renderAll();cloudMsg('Đăng nhập thành công. Đã tải dữ liệu từ Supabase; tự kiểm tra thay đổi mỗi 12 giây và khi quay lại tab.')}else{lastCloudSnapshotJson=JSON.stringify(db);await uploadCloudSnapshot();cloudMsg('Đăng nhập thành công. Chưa có bản đám mây nên đã tải dữ liệu hiện tại lên lần đầu.')}$('#sbPassword').value='';startCloudAutoSync();}catch(e){cloudMsg('Lỗi: '+e.message)}}
-async function uploadCloudSnapshot(){if(!sbSession?.access_token)throw Error('Bạn cần đăng nhập Supabase Auth trước.');if(cloudConflict)throw Error('Đang có xung đột dữ liệu. Hãy xử lý trước khi ghi lên Internet.');const snapshot=JSON.parse(JSON.stringify(db)),snapshotJson=JSON.stringify(snapshot),userId=sbSession.user.id,stamp=new Date().toISOString();cloudWriteQueue=cloudWriteQueue.catch(()=>{}).then(async()=>{cloudBusy=true;cloudMsg('Đang đồng bộ dữ liệu lên Internet…');try{await sbFetch('/rest/v1/app_state?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:userId,payload:snapshot,updated_at:stamp})});rememberCloudSnapshot(snapshotJson);lastCloudUpdatedAt=stamp;return true}finally{cloudBusy=false}});return cloudWriteQueue}
+async function supabaseSignIn(){try{if(!saveSupabaseConfig())return;const email=$('#sbEmail').value.trim(),password=$('#sbPassword').value;if(!email||!password)return cloudMsg('Nhập email và mật khẩu tài khoản Supabase Auth.');cloudMsg('Đang đăng nhập…');const r=await fetch(sbConfig.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:sbConfig.key,'Content-Type':'application/json'},body:JSON.stringify({email,password})});const d=await r.json();if(!r.ok)throw Error(d.msg||d.message||'Đăng nhập thất bại');sbSession=d;sessionStorage.setItem(SB_SESSION_KEY,JSON.stringify(d));if(!d.user?.id||!d.access_token)throw Error('Supabase không trả về phiên đăng nhập hợp lệ.');const prof=await sbFetch('/rest/v1/profiles?user_id=eq.'+encodeURIComponent(d.user.id)+'&select=user_id,role,type');if(!prof?.length||String(prof[0].role||'').toLowerCase()!=='admin'||String(prof[0].type||'').toLowerCase()!=='admin')throw Error('Tài khoản chưa được cấp quyền quản trị trong profiles (cần role=admin và type=admin).');const centerAdmin=await sbFetch('/rest/v1/rpc/dv_center_admin_user_id',{method:'POST',body:'{}'});const centerAdminId=String(centerAdmin||'').replace(/^"|"$/g,'');if(centerAdminId.toLowerCase()!==String(d.user.id).toLowerCase())throw Error('Tài khoản Admin này không phải Admin trung tâm đã cấu hình trong Supabase. Hãy đăng nhập đúng tài khoản Admin trung tâm; không tự tạo bản app_state mới.');const row=await fetchCloudRow();if(row?.payload){db=row.payload;localStorage.setItem('daoVuKarateDB',JSON.stringify(db));rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=row.updated_at||null;renderAll();cloudMsg('Đăng nhập thành công. Đã tải dữ liệu từ Supabase; tự kiểm tra thay đổi mỗi 12 giây và khi quay lại tab.')}else{lastCloudSnapshotJson=JSON.stringify(db);await uploadCloudSnapshot();cloudMsg('Đăng nhập thành công. Chưa có bản đám mây nên đã tải dữ liệu hiện tại lên lần đầu.')}$('#sbPassword').value='';startCloudAutoSync();}catch(e){cloudMsg('Lỗi: '+e.message)}}
+async function uploadCloudSnapshot(){if(!sbSession?.access_token)throw Error('Bạn cần đăng nhập Supabase Auth trước.');if(cloudConflict)throw Error('Đang có xung đột dữ liệu. Hãy xử lý trước khi ghi lên Internet.');const snapshot=JSON.parse(JSON.stringify(db)),snapshotJson=JSON.stringify(snapshot),userId=sbSession.user.id;cloudWriteQueue=cloudWriteQueue.catch(()=>{}).then(async()=>{cloudBusy=true;cloudMsg('Đang đồng bộ dữ liệu lên Internet…');try{const current=await fetchCloudRow();if(current?.payload){if(!lastCloudUpdatedAt||String(current.updated_at)!==String(lastCloudUpdatedAt)){pendingRemoteRow=current;cloudConflict=true;cloudMsg('Phát hiện máy khác vừa cập nhật dữ liệu. Đã khóa ghi đè; hãy tải bản Internet để đối chiếu.');throw Error('Dữ liệu máy chủ đã thay đổi từ thiết bị khác. Đã chặn ghi đè để bảo vệ dữ liệu.');}const stamp=new Date().toISOString();const rows=await sbFetch('/rest/v1/app_state?user_id=eq.'+encodeURIComponent(userId)+'&updated_at=eq.'+encodeURIComponent(lastCloudUpdatedAt),{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({payload:snapshot,updated_at:stamp})});if(!Array.isArray(rows)||!rows.length){const latest=await fetchCloudRow();if(latest?.payload)pendingRemoteRow=latest;cloudConflict=true;throw Error('Có thiết bị khác vừa lưu. Không ghi đè dữ liệu đó. Hãy tải bản Internet.');}rememberCloudSnapshot(snapshotJson);lastCloudUpdatedAt=rows[0].updated_at||stamp;return true;}const stamp=new Date().toISOString();await sbFetch('/rest/v1/app_state?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:userId,payload:snapshot,updated_at:stamp})});rememberCloudSnapshot(snapshotJson);lastCloudUpdatedAt=stamp;return true}finally{cloudBusy=false}});return cloudWriteQueue}
 async function syncCloudNow(){try{if(!sbSession?.access_token)return cloudMsg('Hãy đăng nhập Supabase Auth trước khi đồng bộ.');if(cloudConflict)return cloudMsg('Hãy chọn Dùng bản Internet hoặc Ghi đè bằng bản này trước.');await uploadCloudSnapshot();cloudMsg('Đã đồng bộ dữ liệu hiện tại lên Supabase. Các thiết bị Admin khác sẽ tự nhận trong tối đa khoảng 12 giây.')}catch(e){cloudMsg('Lỗi đồng bộ: '+e.message)}}
 async function useRemoteCloudVersion(){if(!cloudConflict||!pendingRemoteRow?.payload)return;if(!confirm('Thay dữ liệu đang có trên thiết bị này bằng bản mới nhất trên Internet? Những thay đổi chưa đồng bộ trên thiết bị này sẽ bị thay thế.'))return;db=pendingRemoteRow.payload;localStorage.setItem('daoVuKarateDB',JSON.stringify(db));rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=pendingRemoteRow.updated_at;pendingRemoteRow=null;cloudConflict=false;renderAll();cloudMsg('Đã tải và sử dụng bản dữ liệu mới nhất trên Internet.')}
 async function overwriteRemoteWithLocal(){if(!cloudConflict)return;if(!confirm('Ghi đè dữ liệu trên Internet bằng dữ liệu hiện có trên thiết bị này? Thay đổi từ thiết bị khác có thể bị mất. Chỉ chọn nếu chắc chắn.'))return;cloudConflict=false;pendingRemoteRow=null;try{await uploadCloudSnapshot();cloudMsg('Đã ghi đè bản Internet bằng dữ liệu trên thiết bị này.')}catch(e){cloudConflict=true;cloudMsg('Không ghi được: '+e.message)}}
@@ -849,13 +862,13 @@ async function handleRoleSelect(e){
    cloudMsg('HLV chưa đăng nhập được: '+(err.message||err));e.target.value=role;return;
   }
  }
- if(requested!=='coach'){activeCoachClassId='';activeCoachClassPin='';activeCoachName=''}
+ if(requested!=='coach'){stopCoachLiveRefresh();activeCoachClassId='';activeCoachClassPin='';activeCoachName=''}
  role=requested;document.body.classList.toggle('parent-mode',role==='parent');document.body.classList.toggle('coach-mode',role==='coach');
  const names={admin:'Quản lý võ đường',coach:'Huấn luyện viên '+(activeCoachName||''),parent:'Phụ huynh'};
  $('#welcomeTitle').textContent='Xin chào, '+names[role]+'! 👋';
  $('#userAvatar').textContent={admin:'DV',coach:'HLV',parent:'PH'}[role];
  renderAll();
- if(requested==='coach'){setPage('attendance');renderAttendance();renderAttendanceSummary();cloudMsg('HLV đã truy cập lớp '+(db.classes.find(c=>String(c.id)===activeCoachClassId)?.name||'')+'. Danh sách được tải từ Supabase.');}
+ if(requested==='coach'){startCoachLiveRefresh();setPage('attendance');renderAttendance();renderAttendanceSummary();cloudMsg('HLV đã truy cập lớp '+(db.classes.find(c=>String(c.id)===activeCoachClassId)?.name||'')+'. Danh sách được tải từ Supabase.');}
  else setPage('home');
 }
 $('#roleSelect').onchange=handleRoleSelect;
@@ -891,7 +904,26 @@ function renderReviewTools(){
 }
 
 function loadReviewForm(){const s=db.students.find(x=>x.id===$('#reviewStudent')?.value);if(!s)return;const month=$('#reviewMonth').value||today().slice(0,7);const r=(s.monthlyReviews||[]).find(x=>x.month===month);$('#reviewText').value=r?.text||'';$('#reviewCoach').value=r?.coach||'';$('#reviewStatus').innerHTML=r?'<div class="notice success">Đã có nhận xét cho tháng này. Lưu sẽ cập nhật bản hiện có.</div>':'<div class="notice">Chưa có nhận xét cho tháng này.</div>'}
-function saveMonthlyReview(){if(role!=='coach'&&role!=='admin')return toast('Bạn không có quyền ghi nhận xét');const s=db.students.find(x=>x.id===$('#reviewStudent').value),month=$('#reviewMonth').value,textValue=$('#reviewText').value.trim(),coach=$('#reviewCoach').value.trim();if(!s||!month||!textValue)return toast('Vui lòng chọn võ sinh, tháng và nhập nhận xét');if(role==='coach'&&!coachClasses().some(c=>c.id===s.classId))return toast('Bạn chỉ được nhận xét võ sinh thuộc lớp mình phụ trách.');if(!Array.isArray(s.monthlyReviews))s.monthlyReviews=[];const old=s.monthlyReviews.find(x=>x.month===month);if(old){old.text=textValue;old.coach=coach;old.updatedAt=today()}else{s.monthlyReviews.push({month,text:textValue,coach,updatedAt:today()})}s.coachNote=textValue;s.learningResult='Nhận xét tháng '+month+': '+textValue;save(false,false);renderReviewTools();loadReviewForm();if(sbSession?.access_token){uploadCloudSnapshot().then(()=>{const st=$('#reviewStatus');if(st)st.innerHTML='<div class="notice success">Đã lưu và đồng bộ nhận xét tháng '+esc(month)+' lên Internet. Admin và phụ huynh sẽ thấy sau khi tải dữ liệu mới.</div>';toast('Đã đồng bộ nhận xét tháng '+month)}).catch(e=>{const st=$('#reviewStatus');if(st)st.innerHTML='<div class="notice danger">Nhận xét mới chỉ lưu trên thiết bị này; đồng bộ Internet thất bại: '+esc(e.message)+'</div>';toast('Chưa đồng bộ được nhận xét')})}else{const st=$('#reviewStatus');if(st)st.innerHTML='<div class="notice danger">Nhận xét hiện chỉ lưu trên thiết bị này, CHƯA đồng bộ lên Internet. Cần đăng nhập Supabase Auth bằng tài khoản được phân quyền trước khi nhận xét có thể hiển thị trên thiết bị Admin/phụ huynh.</div>';toast('Đã lưu trên máy; chưa đồng bộ Internet')} }
+async function saveMonthlyReview(){
+ if(role!=='coach'&&role!=='admin')return toast('Bạn không có quyền ghi nhận xét');
+ const s=db.students.find(x=>x.id===$('#reviewStudent').value),month=$('#reviewMonth').value,textValue=$('#reviewText').value.trim(),coach=$('#reviewCoach').value.trim();
+ if(!s||!month||!textValue)return toast('Vui lòng chọn võ sinh, tháng và nhập nhận xét');
+ if(role==='coach'&&!coachClasses().some(c=>c.id===s.classId))return toast('Bạn chỉ được nhận xét võ sinh thuộc lớp mình phụ trách.');
+ if(role==='coach'){
+  try{
+   await sbFetch('/rest/v1/rpc/coach_save_review',{method:'POST',body:JSON.stringify({p_class_id:String(s.classId),p_class_pin:String(activeCoachClassPin||''),p_student_id:String(s.id),p_month:String(month),p_text:textValue,p_coach:coach||activeCoachName||'HLV'})});
+  }catch(e){const st=$('#reviewStatus');if(st)st.innerHTML='<div class="notice danger">Chưa lưu được nhận xét lên máy chủ: '+esc(e.message)+'</div>';return toast('Chưa đồng bộ được nhận xét');}
+ }
+ if(!Array.isArray(s.monthlyReviews))s.monthlyReviews=[];
+ const old=s.monthlyReviews.find(x=>x.month===month);
+ if(old){old.text=textValue;old.coach=coach;old.updatedAt=today()}else{s.monthlyReviews.push({month,text:textValue,coach,updatedAt:today()})}
+ s.coachNote=textValue;s.learningResult='Nhận xét tháng '+month+': '+textValue;
+ if(role==='admin')save();else localStorage.setItem('daoVuKarateDB',JSON.stringify(db));
+ renderReviewTools();loadReviewForm();
+ const st=$('#reviewStatus');
+ if(st)st.innerHTML='<div class="notice success">Đã lưu nhận xét tháng '+esc(month)+' lên hệ thống trung tâm.</div>';
+ toast('Đã lưu nhận xét tháng '+month);
+}
 
 function escapeQuestion(v){return esc(String(v||''))}
 async function submitPublicQuestion(){
@@ -977,6 +1009,39 @@ function scheduledDatesForMonth(cls,month){
  for(let d=1;d<=last;d++){const dt=new Date(y,m-1,d);if(days.includes(dt.getDay()))out.push(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`)}
  return out;
 }
+
+let dvCoachRefreshTimer=null,dvCoachRefreshBusy=false;
+async function dvRefreshCoachClass(silent=true){
+ if(role!=='coach'||!activeCoachClassId||!activeCoachClassPin||dvCoachRefreshBusy||document.hidden)return;
+ if(document.querySelector('.modal-backdrop.open'))return;
+ dvCoachRefreshBusy=true;
+ try{
+  const remote=await sbFetch('/rest/v1/rpc/coach_get_class',{method:'POST',body:JSON.stringify({p_class_pin:String(activeCoachClassPin)})});
+  if(!remote?.class?.id||String(remote.class.id)!==String(activeCoachClassId))return;
+  const cid=String(activeCoachClassId),chosen=remote.class;
+  db.classes=(db.classes||[]).filter(c=>String(c.id)!==cid).concat([{...(db.classes||[]).find(c=>String(c.id)===cid),...chosen}]);
+  db.students=(db.students||[]).filter(st=>String(st.classId)!==cid).concat(Array.isArray(remote.students)?remote.students:[]);
+  db.attendance=db.attendance||{};
+  Object.keys(db.attendance).forEach(k=>{if(k.endsWith('_'+cid))delete db.attendance[k]});
+  if(remote.attendance&&typeof remote.attendance==='object')Object.assign(db.attendance,remote.attendance);
+  db.classFund=(db.classFund||[]).filter(x=>String(x.classId)!==cid).concat(Array.isArray(remote.classFund)?remote.classFund:[]);
+  db.notices=(db.notices||[]).filter(n=>String(n.classId)!==cid).concat(Array.isArray(remote.notices)?remote.notices:[]);
+  localStorage.setItem('daoVuKarateDB',JSON.stringify(db));
+  if(currentPage==='attendance'){renderAttendance();renderAttendanceSummary()}
+  else if(currentPage==='students')renderStudents();
+  if(!silent)cloudMsg('Đã cập nhật danh sách lớp và điểm danh từ máy chủ.');
+ }catch(e){if(!silent)cloudMsg('Chưa tải được dữ liệu lớp mới: '+e.message)}
+ finally{dvCoachRefreshBusy=false}
+}
+function startCoachLiveRefresh(){
+ if(dvCoachRefreshTimer)clearInterval(dvCoachRefreshTimer);
+ if(role==='coach'&&activeCoachClassId){
+  dvRefreshCoachClass(true);
+  dvCoachRefreshTimer=setInterval(()=>dvRefreshCoachClass(true),15000);
+ }
+}
+function stopCoachLiveRefresh(){if(dvCoachRefreshTimer)clearInterval(dvCoachRefreshTimer);dvCoachRefreshTimer=null}
+
 function renderAttendance(){
  syncAttendanceCycle();
  const visibleClasses=role==='coach'?coachClasses():db.classes,sel=$('#attendanceClass'),old=sel.value;
@@ -1066,13 +1131,10 @@ async function saveAttendance(){
  }
  const key=attendanceKey();db.attendance[key]=db.attendance[key]||{};
  Object.entries(records).forEach(([id,status])=>{db.attendance[key][id]=status});
- document.querySelectorAll('[data-fund-paid]').forEach(el=>{
+ for(const el of document.querySelectorAll('[data-fund-paid]')){
   const sid=String(el.dataset.fundPaid);
-  if(allowedIds.has(sid)&&el.checked){
-   const st=db.students.find(x=>String(x.id)===sid);
-   if(st&&canManageClassFund(st))recordClassFund(sid,new Date().getFullYear(),role==='coach'?(activeCoachName||'HLV'):'Admin');
-  }
- });
+  if(allowedIds.has(sid)&&el.checked){const st=db.students.find(x=>String(x.id)===sid);if(st&&canManageClassFund(st)){if(role==='coach'){try{await saveCoachClassFundRemote('upsert',sid,new Date().getFullYear(),classFundRate(st),today(),activeCoachName||'HLV')}catch(e){return toast('Điểm danh đã lưu trên máy chủ nhưng chưa ghi được quỹ lớp: '+e.message)}}recordClassFund(sid,new Date().getFullYear(),role==='coach'?(activeCoachName||'HLV'):'Admin')}}
+ }
  if(role==='admin'){updateStudentStatusFromAttendance();save()}else{localStorage.setItem('daoVuKarateDB',JSON.stringify(db))}
  renderAttendance();renderAttendanceSummary();renderTuition();renderStudents();renderReports();renderClassFund();
  toast(role==='coach'?'Đã lưu và gửi điểm danh lên hệ thống chung.':'Đã lưu điểm danh.');
@@ -1635,7 +1697,7 @@ async function purgeAllStudentData(){
  if(role!=='admin')return toast('Chỉ Admin mới được thực hiện thao tác này.');
  if(!sbSession?.access_token||String(sbSession.user?.id||'')==='')return toast('Hãy đăng nhập tài khoản Admin Supabase trước khi xóa.');
  if(cloudBusy||cloudConflict)return toast('Đang đồng bộ hoặc có xung đột dữ liệu. Chưa xóa bất kỳ dữ liệu nào.');
- const ok=confirm('XÓA THEO PHẠM VI ĐÃ DUYỆT?\\n\\nSẽ xóa: toàn bộ hồ sơ võ sinh đang hoạt động/đã lưu trữ; toàn bộ mã số đã cấp và bộ đếm; điểm danh, học phí, quỹ lớp, điểm thi, ảnh hồ sơ, nhận xét, đăng ký và hội thoại phụ huynh gắn với võ sinh; mã số trở về 001.\\n\\nGiữ nguyên: lớp học, HLV, lịch lớp, quỹ lớp, thư viện ảnh dùng chung, cài đặt, logo, tài khoản, phân quyền và dữ liệu chung không gắn với võ sinh.\\n\\nHệ thống tải bản sao lưu đầy đủ trước khi ghi lên Supabase, sau đó đọc lại để xác minh. Tiếp tục?');
+ const ok=confirm('XÓA THEO PHẠM VI ĐÃ DUYỆT?\\n\\nSẽ xóa: toàn bộ hồ sơ võ sinh đang hoạt động/đã lưu trữ; toàn bộ mã số đã cấp và bộ đếm; điểm danh, học phí, điểm thi, ảnh hồ sơ, nhận xét, đăng ký và hội thoại phụ huynh gắn với võ sinh; mã số trở về 001.\\n\\nGiữ nguyên: lớp học, HLV, lịch lớp, toàn bộ dữ liệu quỹ lớp, thư viện ảnh dùng chung, cài đặt, logo, tài khoản, phân quyền và dữ liệu chung không gắn với võ sinh.\\n\\nHệ thống tải bản sao lưu đầy đủ trước khi ghi lên Supabase, sau đó đọc lại để xác minh. Tiếp tục?');
  if(!ok)return;
  const typed=prompt('Xác nhận lần cuối. Nhập chính xác: XOA DU LIEU DA CHOT');
  if(typed!=='XOA DU LIEU DA CHOT')return toast('Đã hủy. Không có dữ liệu nào bị xóa.');
@@ -1647,10 +1709,15 @@ async function purgeAllStudentData(){
    if(!lastCloudSnapshotJson||remoteJson!==lastCloudSnapshotJson)throw Error('Bản dữ liệu trên Supabase chưa khớp với bản đã tải trên thiết bị. Đã dừng để tránh ghi đè dữ liệu mới. Hãy tải bản Internet và xử lý xung đột trước.');
    const working=JSON.parse(remoteJson);
    const students=Array.isArray(working.students)?working.students:[];
+   const archived=Array.isArray(working._deletedStudents)?working._deletedStudents:[];
    const ids=new Set(),codes=new Set();
-   students.forEach(st=>{
+   [...students,...archived].forEach(st=>{
      ['id','studentId','student_id'].forEach(k=>{if(st?.[k]!=null&&String(st[k]).trim())ids.add(String(st[k]).trim())});
      ['id','code','studentCode','student_code','maVoSinh','ma_vo_sinh'].forEach(k=>{if(st?.[k]!=null&&String(st[k]).trim()&&/^Dv[A-Z]\d+$/i.test(String(st[k]).trim()))codes.add(String(st[k]).trim())});
+   });
+   (Array.isArray(working._retiredStudentCodes)?working._retiredStudentCodes:[]).forEach(code=>{
+     const value=String(code||'').trim();
+     if(value){ids.add(value);if(/^Dv[A-Z]\d+$/i.test(value))codes.add(value);}
    });
    const linked=o=>!!o&&typeof o==='object'&&['studentId','student_id','studentCode','student_code','maVoSinh','ma_vo_sinh','student'].some(k=>o[k]!=null&&(ids.has(String(o[k]).trim())||codes.has(String(o[k]).trim())));
    const countLinked=a=>(Array.isArray(a)?a:[]).filter(linked).length;
@@ -1665,14 +1732,14 @@ async function purgeAllStudentData(){
    working.grades=[];
    working.examSheets=[];
    working.photos=[];
-   working.notices=(Array.isArray(working.notices)?working.notices:[]).filter(x=>!linked(x)&&x.audience!=='Cho một học sinh');
+   working.notices=(Array.isArray(working.notices)?working.notices:[]).filter(x=>!linked(x));
    working.centerEvents=(Array.isArray(working.centerEvents)?working.centerEvents:[]).filter(x=>!linked(x));
    if(Array.isArray(working.reviews))working.reviews=[];
    working.achievements=(Array.isArray(working.achievements)?working.achievements:[]).filter(x=>!linked(x));
    working.payments=[];
    working.attendance={};
-   working.classFund=[];
-   working.registrationRequests=[];
+   // Giữ nguyên quỹ lớp theo phạm vi đã thống nhất.
+   working.registrationRequests=(Array.isArray(working.registrationRequests)?working.registrationRequests:[]).filter(x=>!linked(x));
    // Classes/coaches, schedules, settings/logos, accounts, permissions and shared library remain untouched.
    const backupName='DAO-VU-SAO-LUU-TRUOC-KHI-XOA-THEO-PHAM-VI-DA-CHOT-'+today()+'.json';
    download(backupName,JSON.stringify(remote.payload,null,2),'application/json');
@@ -1684,12 +1751,26 @@ async function purgeAllStudentData(){
    if(!verify?.payload||JSON.stringify(verify.payload)!==JSON.stringify(db))throw Error('Đã gửi dữ liệu nhưng đọc lại Supabase không khớp. Giữ tệp sao lưu để đối chiếu; chưa xác nhận hoàn tất.');
    rememberCloudSnapshot(JSON.stringify(db));lastCloudUpdatedAt=verify.updated_at||null;
    pendingRemoteRow=null;cloudConflict=false;renderAll();
-   cloudMsg('Đã hoàn tất và xác minh Supabase. Đã xóa '+counts.students+' hồ sơ đang hoạt động, '+counts.deletedStudents+' hồ sơ lưu trữ, toàn bộ mã số thử nghiệm và đặt bộ đếm về 001; đã xóa dữ liệu liên quan gồm '+counts.payments+' khoản thanh toán, '+counts.grades+' bản ghi điểm, '+counts.photos+' ảnh, '+counts.achievements+' thành tích và '+counts.registrationRequests+' yêu cầu đăng ký. Đã giữ nguyên lớp, HLV, lịch học, thư viện ảnh dùng chung, cài đặt, tài khoản và phân quyền; quỹ lớp đã được reset.');
+   cloudMsg('Đã hoàn tất và xác minh Supabase. Đã xóa '+counts.students+' hồ sơ đang hoạt động, '+counts.deletedStudents+' hồ sơ lưu trữ, toàn bộ mã số thử nghiệm và đặt bộ đếm về 001; đã xóa dữ liệu liên quan gồm '+counts.payments+' khoản thanh toán, '+counts.grades+' bản ghi điểm, '+counts.photos+' ảnh, '+counts.achievements+' thành tích và '+counts.registrationRequests+' yêu cầu đăng ký. Đã giữ nguyên lớp, HLV, lịch học, thư viện ảnh dùng chung, cài đặt, tài khoản và phân quyền; quỹ lớp được giữ nguyên.');
    toast('Đã xóa theo phạm vi đã duyệt và xác minh đồng bộ thành công.');
  }catch(e){cloudMsg('Không hoàn tất thao tác xóa: '+e.message);toast('Đã dừng thao tác: '+e.message);}
 }
 function resetData(){if(confirm('Khôi phục dữ liệu mẫu? Dữ liệu hiện tại sẽ bị thay thế. Hãy xuất bản sao lưu trước nếu cần.')){db=structuredClone(seed);save();renderAll();toast('Đã khôi phục dữ liệu mẫu')}}
-load();$('#attendanceDate').value=today();$('#attendanceMonth').value=today().slice(0,7);if($('#centerEventDate'))$('#centerEventDate').value=today();renderAll();if(sbSession?.access_token){fetchCloudRow().then(row=>{if(row?.payload){const localJson=JSON.stringify(db),remoteJson=JSON.stringify(row.payload),localHash=cloudSnapshotHash(localJson);lastCloudUpdatedAt=row.updated_at||null;if(localJson===remoteJson){rememberCloudSnapshot(localJson)}else if(lastCloudSnapshotHash!==null&&localHash===lastCloudSnapshotHash){db=row.payload;localStorage.setItem('daoVuKarateDB',JSON.stringify(db));rememberCloudSnapshot(remoteJson);renderAll()}else{mergeRemotePaymentsWithoutOverwritingLocal(row.payload,row.updated_at)}cloudMsg(cloudConflict?'Đã nhập khoản thu mới nếu có; thiết bị còn thay đổi khác cần đối chiếu trong mục Đồng bộ Supabase.':'Đã khôi phục phiên quản trị; tự đồng bộ đang bật.');startCloudAutoSync()}}).catch(e=>cloudMsg('Không khôi phục được đồng bộ tự động: '+e.message))}
+load();$('#attendanceDate').value=today();$('#attendanceMonth').value=today().slice(0,7);if($('#centerEventDate'))$('#centerEventDate').value=today();renderAll();if(sbSession?.access_token){fetchCloudRow().then(row=>{
+ if(row?.payload){
+  const localJson=JSON.stringify(db),remoteJson=JSON.stringify(row.payload),localHash=cloudSnapshotHash(localJson);
+  lastCloudUpdatedAt=row.updated_at||null;
+  if(localJson===remoteJson){rememberCloudSnapshot(localJson)}
+  else if(lastCloudSnapshotHash!==null&&localHash===lastCloudSnapshotHash){db=row.payload;localStorage.setItem('daoVuKarateDB',JSON.stringify(db));rememberCloudSnapshot(remoteJson);renderAll()}
+  else{mergeRemotePaymentsWithoutOverwritingLocal(row.payload,row.updated_at)}
+  cloudMsg(cloudConflict?'Đã nhận khoản thu mới nếu có; thiết bị còn thay đổi khác cần đối chiếu trong mục Đồng bộ Supabase.':'Đã khôi phục phiên quản trị; tự đồng bộ đang bật.');
+ }else{
+  // Chưa có app_state: giữ nguyên dữ liệu trên thiết bị và đặt mốc để phát hiện bản ghi được tạo từ thiết bị khác.
+  if(lastCloudSnapshotHash===null)rememberCloudSnapshot(JSON.stringify(db));
+  cloudMsg('Chưa có bản ghi trung tâm trên Supabase. Giữ nguyên dữ liệu trên thiết bị; hệ thống vẫn tiếp tục kiểm tra máy chủ mỗi 12 giây.');
+ }
+ startCloudAutoSync();
+}).catch(e=>{cloudMsg('Không khôi phục được dữ liệu Supabase: '+e.message);startCloudAutoSync()})}
 
 
 // Quỹ lớp và thành tích: lưu trong cùng db JSON để tiếp tục đồng bộ Supabase hiện hữu.
@@ -1697,6 +1778,7 @@ function classFundRate(student){const m=Number(String(student.joined||'').slice(
 function classFundPaid(studentId,year){return (db.classFund||[]).some(x=>String(x.studentId)===String(studentId)&&Number(x.year)===Number(year)&&x.status==='Đã đóng')}
 function canManageClassFund(student){return role==='admin'||(role==='coach'&&coachClasses().some(c=>String(c.id)===String(student?.classId)))}
 function recordClassFund(studentId,year,by,amount,date){db.classFund=db.classFund||[];const st=db.students.find(x=>String(x.id)===String(studentId));if(!st||!canManageClassFund(st))return false;const old=db.classFund.find(x=>String(x.studentId)===String(studentId)&&Number(x.year)===Number(year));const rec={studentId:st.id,classId:st.classId,year:Number(year),amount:Number(amount)||classFundRate(st),status:'Đã đóng',date:date||today(),recordedBy:by||(role==='coach'?'HLV':'Admin')};if(old)Object.assign(old,rec);else db.classFund.push({id:'F'+Date.now()+Math.random().toString(16).slice(2,6),...rec});(db.notices||[]).forEach(n=>{if(n.classFundNotice===true&&String(n.studentId)===String(st.id)&&Number(n.fundYear)===Number(year)){n.status='completed';n.completedAt=new Date().toISOString();n.completedBy=rec.recordedBy}});return true}
+async function saveCoachClassFundRemote(operation,studentId,year,amount,date,by){if(role!=='coach')return true;const st=db.students.find(x=>String(x.id)===String(studentId));if(!st||!canManageClassFund(st))throw Error('Võ sinh không thuộc lớp được phân công.');return await sbFetch('/rest/v1/rpc/coach_save_class_fund',{method:'POST',body:JSON.stringify({p_class_id:String(st.classId),p_class_pin:String(activeCoachClassPin||''),p_student_id:String(studentId),p_year:Number(year),p_operation:operation,p_amount:Number(amount)||0,p_date:String(date||today()),p_recorded_by:String(by||activeCoachName||'HLV')})});}
 function fundSelectedYear(){const el=role==='coach'?$('#fundYearAttendance'):$('#fundYear');return Number(el?.value||new Date().getFullYear())}
 function renderClassFund(){
  const allowedClasses=role==='coach'?coachClasses():db.classes,allowedIds=new Set(allowedClasses.map(x=>String(x.id)));
@@ -1711,7 +1793,7 @@ function renderClassFund(){
  });
 }
 function classFundDatePlusDays(dateString,days){const d=new Date((dateString||today())+'T12:00:00');d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
-function createClassFundNotices(){
+async function createClassFundNotices(){
  if(role!=='coach')return toast('Chỉ HLV phụ trách lớp mới được gửi thông báo thu quỹ lớp.');
  const clsId=$('#fundClassAttendance')?.value||coachClasses()[0]?.id;const cls=coachClasses().find(c=>String(c.id)===String(clsId));
  if(!cls)return toast('Không tìm thấy lớp được phân công.');
@@ -1719,13 +1801,14 @@ function createClassFundNotices(){
  const students=db.students.filter(st=>String(st.classId)===String(cls.id)&&st.status==='Đang học');if(!students.length)return toast('Lớp hiện không có võ sinh đang học.');
  const year=new Date().getFullYear(),sentDate=today(),dueDate=classFundDatePlusDays(sentDate,15);
  if(!confirm('Gửi thông báo thu quỹ lớp '+cls.name+' cho '+students.length+' võ sinh?\nHạn đóng: '+dueDate+' (15 ngày từ ngày gửi). Mỗi phụ huynh chỉ thấy thông tin của con mình.'))return;
- db.notices=db.notices||[];let count=0;
- students.forEach(st=>{const alreadyPaid=classFundPaid(st.id,year);if(alreadyPaid)return;const amount=classFundRate(st),memo='QL.'+String(st.id||'').trim()+'.'+String(year);const qrUrl=vietQrUrl(bank,amount,memo);const nowIso=new Date().toISOString();db.notices.forEach(old=>{if(old.classFundNotice===true&&String(old.studentId)===String(st.id)&&Number(old.fundYear)===Number(year)&&old.status!=='completed'){old.status='superseded';old.replacedAt=nowIso}});db.notices.push({id:Date.now()+Math.floor(Math.random()*1000000),title:'THÔNG BÁO THU QUỸ LỚP NĂM '+year,date:sentDate,audience:'Cho một học sinh',studentId:st.id,classId:cls.id,classFundNotice:true,fundYear:year,fundAmount:amount,dueDate,coachName:cls.coach||activeCoachName||'HLV',bankName:bank.bankName,bankAccount:bank.account,bankAccountName:bank.accountName,qrUrl,type:'🏫 Quỹ lớp',body:'Trung tâm Đạo Vũ thông báo khoản quỹ lớp năm '+year+'. Quý phụ huynh vui lòng hoàn thành trong thời hạn 15 ngày kể từ ngày nhận thông báo. Sau khi chuyển khoản, vui lòng chờ HLV xác nhận đã nhận tiền.' ,status:'active',createdAt:nowIso});count++});
- save();renderNotices();toast('Đã tạo '+count+' thông báo quỹ lớp. Võ sinh đã đóng quỹ được tự động bỏ qua.');
+ db.notices=db.notices||[];let count=0;const createdNotices=[];
+ students.forEach(st=>{const alreadyPaid=classFundPaid(st.id,year);if(alreadyPaid)return;const amount=classFundRate(st),memo='QL.'+String(st.id||'').trim()+'.'+String(year);const qrUrl=vietQrUrl(bank,amount,memo);const nowIso=new Date().toISOString();db.notices.forEach(old=>{if(old.classFundNotice===true&&String(old.studentId)===String(st.id)&&Number(old.fundYear)===Number(year)&&old.status!=='completed'){old.status='superseded';old.replacedAt=nowIso}});const newNotice={id:Date.now()+Math.floor(Math.random()*1000000),title:'THÔNG BÁO THU QUỸ LỚP NĂM '+year,date:sentDate,audience:'Cho một học sinh',studentId:st.id,classId:cls.id,classFundNotice:true,fundYear:year,fundAmount:amount,dueDate,coachName:cls.coach||activeCoachName||'HLV',bankName:bank.bankName,bankAccount:bank.account,bankAccountName:bank.accountName,qrUrl,type:'🏫 Quỹ lớp',body:'Trung tâm Đạo Vũ thông báo khoản quỹ lớp năm '+year+'. Quý phụ huynh vui lòng hoàn thành trong thời hạn 15 ngày kể từ ngày nhận thông báo. Sau khi chuyển khoản, vui lòng chờ HLV xác nhận đã nhận tiền.' ,status:'active',createdAt:nowIso};db.notices.push(newNotice);createdNotices.push(newNotice);count++});
+ if(createdNotices.length){try{await sbFetch('/rest/v1/rpc/coach_save_class_fund_notices',{method:'POST',body:JSON.stringify({p_class_id:String(cls.id),p_class_pin:String(activeCoachClassPin||''),p_notices:createdNotices})})}catch(e){db.notices=db.notices.filter(n=>!createdNotices.includes(n));return toast('Chưa gửi được thông báo quỹ lớp lên máy chủ: '+e.message)}}
+ localStorage.setItem('daoVuKarateDB',JSON.stringify(db));renderNotices();toast('Đã tạo '+count+' thông báo quỹ lớp và lưu trên máy chủ trung tâm. Võ sinh đã đóng quỹ được tự động bỏ qua.');
 }
-function collectClassFund(id){const st=db.students.find(x=>String(x.id)===String(id));if(!canManageClassFund(st))return toast('Bạn không có quyền thao tác quỹ lớp này.');const y=fundSelectedYear();const n=classFundRate(st);if(!confirm('Xác nhận đã nhận quỹ lớp của '+st.name+'?\nSố tiền tự tính: '+money(n)+'\nNăm quỹ: '+y))return;const date=prompt('Ngày nhận tiền (YYYY-MM-DD):',today());if(date===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return toast('Ngày nhận tiền không hợp lệ.');recordClassFund(id,y,role==='coach'?(activeCoachName||'HLV'):'Admin',n,date);save();renderClassFund();toast('Đã xác nhận nhận quỹ lớp và đồng bộ trạng thái')}
-function editClassFund(id){const st=db.students.find(x=>String(x.id)===String(id));if(!canManageClassFund(st))return toast('Bạn không có quyền sửa quỹ lớp này.');const y=fundSelectedYear();const rec=(db.classFund||[]).find(x=>String(x.studentId)===String(id)&&Number(x.year)===y);if(!rec)return;const amount=prompt('Điều chỉnh số tiền quỹ lớp (đồng):',String(rec.amount??classFundRate(st)));if(amount===null)return;const n=Number(String(amount).replace(/[^0-9.-]/g,''));if(!Number.isFinite(n)||n<0)return toast('Số tiền không hợp lệ.');const date=prompt('Điều chỉnh ngày thu (YYYY-MM-DD):',rec.date||today());if(date===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return toast('Ngày thu không hợp lệ.');rec.amount=n;rec.date=date;rec.recordedBy=role==='coach'?(activeCoachName||'HLV'):'Admin';rec.classId=st.classId;save();renderClassFund();toast('Đã cập nhật khoản quỹ lớp')}
-function deleteClassFund(id){const st=db.students.find(x=>String(x.id)===String(id));if(!canManageClassFund(st))return toast('Bạn không có quyền xóa quỹ lớp này.');if(!confirm('Xóa xác nhận thu quỹ lớp của võ sinh này trong năm đang chọn?'))return;const y=fundSelectedYear();db.classFund=(db.classFund||[]).filter(x=>!(String(x.studentId)===String(id)&&Number(x.year)===y));save();renderClassFund();toast('Đã xóa khoản ghi nhận quỹ lớp')}
+async function collectClassFund(id){const st=db.students.find(x=>String(x.id)===String(id));if(!canManageClassFund(st))return toast('Bạn không có quyền thao tác quỹ lớp này.');const y=fundSelectedYear(),n=classFundRate(st);if(!confirm('Xác nhận đã nhận quỹ lớp của '+st.name+'?\nSố tiền tự tính: '+money(n)+'\nNăm quỹ: '+y))return;const date=prompt('Ngày nhận tiền (YYYY-MM-DD):',today());if(date===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return toast('Ngày nhận tiền không hợp lệ.');try{await saveCoachClassFundRemote('upsert',id,y,n,date,activeCoachName||'HLV');recordClassFund(id,y,role==='coach'?(activeCoachName||'HLV'):'Admin',n,date);if(role==='admin')save();else localStorage.setItem('daoVuKarateDB',JSON.stringify(db));renderClassFund();toast('Đã xác nhận thu quỹ lớp và lưu lên máy chủ trung tâm.')}catch(e){toast('Chưa lưu được quỹ lớp lên máy chủ: '+e.message)}}
+async function editClassFund(id){const st=db.students.find(x=>String(x.id)===String(id));if(!canManageClassFund(st))return toast('Bạn không có quyền sửa quỹ lớp này.');const y=fundSelectedYear(),rec=(db.classFund||[]).find(x=>String(x.studentId)===String(id)&&Number(x.year)===y);if(!rec)return;const amount=prompt('Điều chỉnh số tiền quỹ lớp (đồng):',String(rec.amount??classFundRate(st)));if(amount===null)return;const n=Number(String(amount).replace(/[^0-9.-]/g,''));if(!Number.isFinite(n)||n<0)return toast('Số tiền không hợp lệ.');const date=prompt('Điều chỉnh ngày thu (YYYY-MM-DD):',rec.date||today());if(date===null)return;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return toast('Ngày thu không hợp lệ.');try{await saveCoachClassFundRemote('upsert',id,y,n,date,activeCoachName||'HLV');rec.amount=n;rec.date=date;rec.recordedBy=role==='coach'?(activeCoachName||'HLV'):'Admin';rec.classId=st.classId;if(role==='admin')save();else localStorage.setItem('daoVuKarateDB',JSON.stringify(db));renderClassFund();toast('Đã cập nhật khoản quỹ lớp trên máy chủ.')}catch(e){toast('Chưa cập nhật được quỹ lớp: '+e.message)}}
+async function deleteClassFund(id){const st=db.students.find(x=>String(x.id)===String(id));if(!canManageClassFund(st))return toast('Bạn không có quyền xóa quỹ lớp này.');if(!confirm('Xóa xác nhận thu quỹ lớp của võ sinh này trong năm đang chọn?'))return;const y=fundSelectedYear();try{await saveCoachClassFundRemote('delete',id,y,0,today(),activeCoachName||'HLV');db.classFund=(db.classFund||[]).filter(x=>!(String(x.studentId)===String(id)&&Number(x.year)===y));if(role==='admin')save();else localStorage.setItem('daoVuKarateDB',JSON.stringify(db));renderClassFund();toast('Đã xóa khoản ghi nhận quỹ lớp trên máy chủ.')}catch(e){toast('Chưa xóa được quỹ lớp: '+e.message)}}
 function adminToggleFund(id){if(role!=='admin')return toast('Chỉ Admin được chỉnh sửa sổ quỹ.');const y=Number($('#fundYear').value||new Date().getFullYear()),i=(db.classFund||[]).findIndex(x=>String(x.studentId)===String(id)&&Number(x.year)===y);if(i>=0)db.classFund.splice(i,1);else recordClassFund(id,y,'Admin');save();renderClassFund()}
 function syncAchievementStudent(){const raw=$('#achievementStudentSearch')?.value.trim()||'';const found=db.students.find(st=>String(st.id).toLowerCase()===raw.toLowerCase()||(`${st.id} · ${st.name}`).toLowerCase()===raw.toLowerCase());$('#achievementStudent').value=found?found.id:''}
 function saveAchievement(){if(role!=='admin')return toast('Chỉ Admin được đăng thành tích.');const title=$('#achievementTitle').value.trim(),files=[...($('#achievementFiles').files||[])];if(!title)return toast('Nhập tên giải hoặc thành tích.');if(files.length>8)return toast('Mỗi lần chọn tối đa 8 ảnh.');const st=$('#achievementStudent').value,base={id:'A'+Date.now(),type:$('#achievementType').value,title,studentId:st,date:$('#achievementDate').value||today(),note:$('#achievementNote').value.trim(),images:[]};let pending=files.length;const finish=()=>{db.achievements=db.achievements||[];db.achievements.unshift(base);save();renderAchievements();$('#achievementMsg').innerHTML='<div class="notice success">Đã lưu thành tích và hình ảnh.</div>';$('#achievementTitle').value='';$('#achievementNote').value='';$('#achievementFiles').value=''};if(!pending)return finish();files.forEach(f=>{if(f.size>4*1024*1024){pending--;if(!pending)finish();return}const rd=new FileReader();rd.onload=()=>{base.images.push(rd.result);pending--;if(!pending)finish()};rd.onerror=()=>{pending--;if(!pending)finish()};rd.readAsDataURL(f)})}
